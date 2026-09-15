@@ -1,0 +1,966 @@
+// Story Architect — MVP database schema
+// PostgreSQL 16 + pgvector
+//
+// Инвариант: ИИ пишет ТОЛЬКО в Proposal и AiRun.
+// Любая запись в канон идёт через lib/canon/write.ts с actor = AUTHOR.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  // Пул соединений Supabase (порт 6543) — для работы приложения.
+  url        = env("DATABASE_URL")
+  // Прямое соединение (порт 5432) — только для миграций: через
+  // пул они не проходят, pgbouncer не держит сессионные блокировки.
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+// ─────────────────────────── ENUMS ───────────────────────────
+
+enum RecordStatus {
+  CANON
+  PROPOSAL
+  DRAFT
+  REJECTED
+  UNKNOWN
+}
+
+enum CanonLevel {
+  HARD
+  SOFT
+}
+
+enum ChapterStatus {
+  IDEA
+  PLANNED
+  DRAFT
+  EDITING
+  CHECKING
+  APPROVED
+  CANON
+}
+
+enum PlotLineStatus {
+  ACTIVE
+  DORMANT
+  RESOLVED
+  ABANDONED
+  UNKNOWN
+}
+
+enum WorldEntityType {
+  LOCATION
+  FACTION
+  ORGANIZATION
+  CIVILIZATION
+  SPECIES
+  SYSTEM
+  TECHNOLOGY
+  MAGIC
+  ARTIFACT
+  HISTORICAL_PERIOD
+  CONCEPT
+  EXTERNAL_FORCE
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+enum ProposalOp {
+  CREATE
+  UPDATE
+  DELETE
+  CANON_CHANGE
+}
+
+enum AlertType {
+  ERROR
+  WARNING
+  OPPORTUNITY
+}
+
+enum AlertPriority {
+  CRITICAL
+  IMPORTANT
+  USEFUL
+  OPTIONAL
+}
+
+enum KnowledgeHolderType {
+  AUTHOR
+  CHARACTER
+  READER
+}
+
+enum SecretKind {
+  SECRET        // скрытая информация
+  FORESHADOWING // заложенная зацепка
+  PROMISE       // обещание читателю
+}
+
+enum ForeshadowStatus {
+  SEEDED
+  DEVELOPING
+  REVEALED
+  RESOLVED
+  ABANDONED
+}
+
+enum StyleScope {
+  GLOBAL
+  BOOK
+  ARC
+  CHAPTER
+  SCENE
+}
+
+enum AiRunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  INVALID_OUTPUT
+  CANCELLED
+}
+
+enum FactSource {
+  AUTHOR
+  AI_EXTRACTION
+  AI_INFERENCE
+  SEED
+}
+
+// ─────────────────────────── CORE ───────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  projects     Project[]
+  aiRuns       AiRun[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Project {
+  id          String  @id @default(cuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  premise        String?
+  genre          String?
+  tone           String?
+  targetAudience String?
+  language       String  @default("ru")
+  status         String  @default("ACTIVE")
+
+  // свободные правила проекта, попадают в Context Pack с P0
+  projectRules String?
+
+  books          Book[]
+  characters     Character[]
+  plotLines      PlotLine[]
+  worldEntities  WorldEntity[]
+  worldRules     WorldRule[]
+  events         Event[]
+  relationships  Relationship[]
+  secrets        Secret[]
+  ideas          Idea[]
+  proposals      Proposal[]
+  changeLog      ChangeLog[]
+  aiRuns         AiRun[]
+  memoryChunks   MemoryChunk[]
+  styleBibles    StyleBible[]
+  openQuestions  OpenQuestion[]
+  canonFacts     CanonFact[]
+  bibleVersions  StoryBibleVersion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Book {
+  id            String  @id @default(cuid())
+  projectId     String
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number        Int
+  title         String
+  premise       String?
+  mainArc       String?
+  plannedEnding String?
+  actualEnding  String?
+  status        RecordStatus @default(DRAFT)
+
+  chapters Chapter[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, number])
+}
+
+model Chapter {
+  id      String  @id @default(cuid())
+  bookId  String
+  book    Book    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  number  Int
+  title   String?
+  purpose String?
+  status  ChapterStatus @default(IDEA)
+
+  // исходная идея автора обычным языком
+  authorIdea String?
+
+  // утверждённый план (structured output STORY ARCHITECT)
+  plan         Json?
+  planApproved Boolean @default(false)
+
+  draftText String? // рабочий текст, автосохранение — НЕ канон
+  finalText String? // текст на момент одобрения главы
+  summary   String?
+
+  wordCount Int @default(0)
+
+  scenes            Scene[]
+  characterStates   CharacterState[]
+  continuityReports ContinuityReport[]
+  chapterSummary    ChapterSummary?
+  versions          ChapterVersion[]
+  memoryChunks      MemoryChunk[]
+
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([bookId, number])
+  @@index([status])
+}
+
+model ChapterVersion {
+  id        String   @id @default(cuid())
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  version   Int
+  text      String
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@unique([chapterId, version])
+}
+
+model Scene {
+  id        String  @id @default(cuid())
+  chapterId String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  order     Int
+  title     String
+  purpose   String?
+  plan      Json?
+  text      String?
+  status    RecordStatus @default(DRAFT)
+
+  // PLANNED vs ACTUAL (ТЗ §46)
+  plannedOutcome String?
+  actualOutcome  String?
+
+  styleOverrideId String?
+  styleOverride   StyleBible? @relation(fields: [styleOverrideId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([chapterId, order])
+}
+
+// ──────────────────────── CHARACTERS ────────────────────────
+
+model Character {
+  id          String  @id @default(cuid())
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  role        String?
+  tier        Int     @default(2) // 1 = главный, 2 = второстепенный, 3 = эпизодический
+  description String?
+  appearance  String?
+  history     String?
+  personality String?
+  goals       String?
+  fears       String?
+  beliefs     String?
+  values      String?
+  abilities   Json?
+
+  status     RecordStatus @default(PROPOSAL)
+  canonLevel CanonLevel   @default(SOFT)
+
+  // провенанс (ТЗ §102)
+  sourceChapterId  String?
+  sourceAiRunId    String?
+  sourceProposalId String?
+  factSource       FactSource @default(AUTHOR)
+  confidence       Float?
+
+  states        CharacterState[]
+  arcs          CharacterArc[]
+  voice         CharacterVoice?
+  relFrom       Relationship[]   @relation("RelSource")
+  relTo         Relationship[]   @relation("RelTarget")
+  knowledge     KnowledgeFact[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, status])
+}
+
+// Журнал дельт. Состояние на главу N = свёртка (projectStateAt).
+model CharacterState {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  chapterId   String?
+  chapter     Chapter?  @relation(fields: [chapterId], references: [id])
+
+  // attribute: leadership | power | knowledge | discipline | reputation |
+  //            worldview | influence | alive | location | possessions | ...
+  attribute String
+  oldValue  Json?
+  newValue  Json
+  reason    String?
+
+  factSource FactSource   @default(AUTHOR)
+  confidence Float?
+  status     RecordStatus @default(CANON)
+
+  sourceAiRunId    String?
+  sourceProposalId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([characterId, chapterId])
+  @@index([characterId, attribute])
+}
+
+model CharacterArc {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  bookId      String?
+  name        String
+
+  startState   Json // { traits: [...], notes }
+  currentState Json?
+  targetState  Json
+
+  status RecordStatus @default(DRAFT)
+  stages ArcStage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([characterId])
+}
+
+model ArcStage {
+  id      String       @id @default(cuid())
+  arcId   String
+  arc     CharacterArc @relation(fields: [arcId], references: [id], onDelete: Cascade)
+  order   Int
+  name    String
+  description String?
+  plannedChapter Int?
+  actualChapter  Int?
+  status  RecordStatus @default(DRAFT)
+
+  @@unique([arcId, order])
+}
+
+model CharacterVoice {
+  id          String    @id @default(cuid())
+  characterId String    @unique
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  vocabulary          String?
+  sentenceLength      String?
+  speechRhythm        String?
+  formality           String?
+  humor               String?
+  emotionalExplicit   String?
+  typicalExpressions  Json?
+  forbiddenExpressions Json?
+  communicationStyle  String?
+
+  status RecordStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ───────────────────────── PLOT ─────────────────────────
+
+model PlotLine {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name              String
+  premise           String?
+  objective         String?
+  currentState      String?
+  participants      Json? // массив characterId / entityId
+  obstacles         Json?
+  plannedResolution String?
+  actualProgress    String?
+
+  plotStatus PlotLineStatus @default(ACTIVE)
+  status     RecordStatus   @default(PROPOSAL)
+
+  // для детектора забытых линий (ТЗ §23)
+  lastProgressChapter Int?
+
+  stages PlotStage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, plotStatus])
+}
+
+model PlotStage {
+  id         String   @id @default(cuid())
+  plotLineId String
+  plotLine   PlotLine @relation(fields: [plotLineId], references: [id], onDelete: Cascade)
+  order      Int
+  name       String
+  description String?
+  plannedChapter Int?
+  actualChapter  Int?
+  status     RecordStatus @default(DRAFT)
+
+  @@unique([plotLineId, order])
+}
+
+// ───────────────────────── WORLD ─────────────────────────
+
+model WorldEntity {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  type        WorldEntityType
+  name        String
+  description String?
+  attributes  Json? // гибкие поля по типу, валидируются Zod
+
+  status     RecordStatus @default(PROPOSAL)
+  canonLevel CanonLevel   @default(SOFT)
+
+  factSource       FactSource @default(AUTHOR)
+  confidence       Float?
+  sourceChapterId  String?
+  sourceAiRunId    String?
+  sourceProposalId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, type])
+}
+
+model WorldRule {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name        String
+  statement   String
+  explanation String?
+  canonLevel  CanonLevel   @default(HARD) // HARD: нарушение = contradiction
+  status      RecordStatus @default(PROPOSAL)
+
+  relatedEntities Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, canonLevel])
+}
+
+// ──────────────────────── TIMELINE ────────────────────────
+
+model Event {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  // строковая дата вселенной + числовой порядок для арифметики
+  inWorldDate String?
+  timeIndex   Float?  // сортируемая ось; null = UNKNOWN DATE
+  duration    String?
+
+  locationId   String?
+  participants Json?
+  cause        String?
+  consequences String?
+
+  relatedCharacters Json?
+  relatedPlotLines  Json?
+
+  chapterNumber Int? // в какой главе показано
+  status        RecordStatus @default(PROPOSAL)
+  canonLevel    CanonLevel   @default(SOFT)
+
+  causeLinks  EventLink[] @relation("CauseEvent")
+  effectLinks EventLink[] @relation("EffectEvent")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, timeIndex])
+}
+
+// граф причин и следствий — основа impact analysis (ТЗ §28, §29)
+model EventLink {
+  id            String @id @default(cuid())
+  causeEventId  String
+  causeEvent    Event  @relation("CauseEvent", fields: [causeEventId], references: [id], onDelete: Cascade)
+  effectEventId String
+  effectEvent   Event  @relation("EffectEvent", fields: [effectEventId], references: [id], onDelete: Cascade)
+  strength      Float  @default(1.0)
+  note          String?
+
+  @@unique([causeEventId, effectEventId])
+}
+
+// ─────────────────────── RELATIONSHIPS ───────────────────────
+
+model Relationship {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  sourceId String
+  source   Character @relation("RelSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetId String
+  target   Character @relation("RelTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  relationType String // trust | rivalry | family | debt | ...
+  value        Int?   // -100..100
+  reason       String?
+
+  // окно валидности в главах
+  validFromChapter   Int?
+  validToChapter     Int?
+  lastChangedChapter Int?
+  sourceChapterId    String?
+
+  status     RecordStatus @default(PROPOSAL)
+  factSource FactSource   @default(AUTHOR)
+  confidence Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([sourceId, targetId, relationType])
+}
+
+// ────────────────────── SECRETS & KNOWLEDGE ──────────────────────
+
+model Secret {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  kind        SecretKind @default(SECRET)
+  name        String
+  description String?
+  importance  Int        @default(3) // 1..5
+
+  plannedRevealChapter Int?
+  revealStatus         ForeshadowStatus @default(SEEDED)
+  seededChapter        Int?
+  lastReferencedChapter Int? // для старения зацепок (ТЗ §33)
+
+  relatedCharacters Json?
+  relatedEvents     Json?
+  relatedPlotLines  Json?
+
+  status RecordStatus @default(PROPOSAL)
+
+  knowledge KnowledgeFact[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, revealStatus])
+}
+
+// Матрица знаний: кто и с какой главы знает секрет (ТЗ §32).
+// Основа детерминированной проверки «персонаж использует то, чего не знает».
+model KnowledgeFact {
+  id       String @id @default(cuid())
+  secretId String
+  secret   Secret @relation(fields: [secretId], references: [id], onDelete: Cascade)
+
+  holderType  KnowledgeHolderType
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  knows        Boolean @default(true)
+  sinceChapter Int?
+  partial      Boolean @default(false)
+  note         String?
+
+  status RecordStatus @default(CANON)
+
+  createdAt DateTime @default(now())
+
+  @@index([secretId, holderType])
+}
+
+// ───────────────────────── IDEAS ─────────────────────────
+
+model Idea {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  text        String
+  aiLinks     Json?   // возможные связи, найденные ИИ — НЕ канон
+  tags        Json?
+  status      RecordStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+// Осознанно незакрытые вопросы автора (ТЗ §82). UNKNOWN — не ошибка.
+model OpenQuestion {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String?
+  status    RecordStatus @default(UNKNOWN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ───────────────────── CANON FACTS ─────────────────────
+
+// Атомарный факт, который не ложится ни в одну типизированную сущность.
+// Пример из ТЗ §79: «Пётр до главы 10 никогда не видел моря».
+// Без этой таблицы такие факты негде хранить, а именно на них
+// ловятся самые частые противоречия.
+model CanonFact {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  statement String   // формулировка факта обычным языком
+  negation  Boolean  @default(false) // факт вида «X никогда не Y»
+
+  entityType String? // к чему привязан: character | world_entity | ...
+  entityId   String?
+
+  // окно действия факта в главах: до какой главы он верен
+  validFromChapter Int?
+  validToChapter   Int?
+
+  importance Int          @default(3)
+  canonLevel CanonLevel   @default(SOFT)
+  status     RecordStatus @default(PROPOSAL)
+
+  factSource       FactSource @default(AUTHOR)
+  confidence       Float?
+  sourceChapterId  String?
+  sourceAiRunId    String?
+  sourceProposalId String?
+
+  // для поиска противоречий по смыслу
+  embedding Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, status])
+  @@index([projectId, entityType, entityId])
+}
+
+// ─────────────────── STORY BIBLE VERSIONS ───────────────────
+
+// Версионность Story Bible (ТЗ §15). Снапшот собранного канона
+// на момент времени — для сравнения и отката.
+model StoryBibleVersion {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  version   Int
+  label     String?
+  snapshot  Json    // сериализованный канон на момент версии
+  createdBy String?
+  note      String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, version])
+}
+
+// ─────────────────── PROPOSAL GATE (ядро) ───────────────────
+
+model Proposal {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // что предлагается изменить
+  entityType String     // 'character' | 'world_entity' | 'plot_line' | ...
+  entityId   String?    // null при CREATE
+  op         ProposalOp
+  payload    Json       // валидированный Zod объект изменения
+  diff       Json?      // предрассчитанный дифф для UI
+
+  reason     String?
+  confidence Float?
+  safety     String  @default("UNCERTAIN") // SAFE | UNCERTAIN | CONFLICT
+
+  status ProposalStatus @default(PENDING)
+
+  aiRunId         String?
+  aiRun           AiRun?  @relation(fields: [aiRunId], references: [id])
+  sourceChapterId String?
+
+  // impact analysis, посчитанный перед применением
+  impact Json?
+
+  reviewedAt   DateTime?
+  reviewedById String?
+  editedPayload Json?    // если автор отредактировал перед принятием
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, status])
+}
+
+model ChangeLog {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  entityType String
+  entityId   String
+  op         ProposalOp
+  before     Json?
+  after      Json?
+
+  actorType  String // AUTHOR | SYSTEM
+  actorId    String?
+  proposalId String?
+  aiRunId    String?
+  chapterId  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, entityType, entityId])
+  @@index([projectId, createdAt])
+}
+
+// ───────────────────────── AI LAYER ─────────────────────────
+
+model AiRole {
+  id        String  @id @default(cuid())
+  projectId String?
+
+  key     String // STORY_ARCHITECT | WRITER | CONTINUITY_EDITOR | ...
+  name    String
+  purpose String
+
+  allowedContext   Json
+  allowedActions   Json
+  forbiddenActions Json
+  systemPrompt     String
+  outputSchema     String
+  model            String
+  generation       Json // temperature, maxTokens, ...
+
+  isActive Boolean @default(true)
+
+  runs AiRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, key])
+}
+
+model AiRun {
+  id        String  @id @default(cuid())
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id])
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  roleId String?
+  role   AiRole? @relation(fields: [roleId], references: [id])
+  roleKey String
+
+  model         String
+  inputTokens   Int?
+  outputTokens  Int?
+  cachedTokens  Int?
+  estimatedCost Decimal? @db.Decimal(12, 6)
+
+  contextSize  Int?
+  contextDebug Json?   // разбивка токенов по слоям Context Pack
+
+  requestPayload  Json?
+  responsePayload Json?
+  errorMessage    String?
+
+  durationMs Int?
+  status     AiRunStatus @default(PENDING)
+
+  proposals Proposal[]
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([projectId, roleKey])
+}
+
+model ContinuityReport {
+  id        String  @id @default(cuid())
+  chapterId String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  level       Int      // 1 = детерминированный, 2 = семантический
+  aiRunId     String?
+  summary     Json?
+  issues      ContinuityIssue[]
+
+  createdAt DateTime @default(now())
+
+  @@index([chapterId])
+}
+
+model ContinuityIssue {
+  id       String           @id @default(cuid())
+  reportId String
+  report   ContinuityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  alertType AlertType
+  priority  AlertPriority @default(USEFUL)
+  category  String        // CHARACTER | TIMELINE | WORLD_RULE | KNOWLEDGE | ...
+
+  title       String
+  evidence    Json?   // цитаты/ссылки на главы и сущности
+  entityRefs  Json?
+  explanations Json?  // варианты объяснений (ТЗ §77)
+
+  confidence            Float?
+  suggestedResolutions  Json?
+
+  resolved     Boolean @default(false)
+  resolution   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([reportId, alertType])
+}
+
+// ───────────────────────── MEMORY ─────────────────────────
+
+model ChapterSummary {
+  id        String  @id @default(cuid())
+  chapterId String  @unique
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  shortSummary String  // 2–3 предложения
+  fullSummary  String?
+  worldDelta   Json?   // извлечённые изменения состояния мира
+  aiRunId      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MemoryChunk {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterId String?
+  chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  kind    String // PROSE | SUMMARY | BIBLE
+  content String
+
+  embedding Unsupported("vector(1536)")?
+
+  tokenCount Int?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, kind])
+}
+
+// ───────────────────────── STYLE ─────────────────────────
+
+model StyleBible {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  scope     StyleScope @default(GLOBAL)
+  scopeId   String?    // bookId / arcId / chapterId / sceneId
+
+  voice              String?
+  pov                String?
+  tense              String?
+  narrativeDistance  String?
+  pacing             String?
+  descriptionDensity String?
+  dialogueDensity    String?
+  internalThought    String?
+  actionDetail       String?
+  metaphorDensity    String?
+  humor              String?
+  darkness           String?
+  hope               String?
+  tragedy            String?
+  worldbuildingDensity String?
+  forbiddenPatterns  Json?
+
+  // литературные ориентиры хранятся как характеристики, не как «пиши как X»
+  styleCharacteristics Json?
+
+  status RecordStatus @default(DRAFT)
+
+  scenes Scene[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, scope])
+}
