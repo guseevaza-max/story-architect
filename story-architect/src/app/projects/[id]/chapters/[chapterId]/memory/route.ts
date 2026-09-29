@@ -10,6 +10,25 @@ function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+async function findPendingMemoryProposal(projectId: string, chapterId: string) {
+  // Ищем не только по полям proposal, но и по chapterId внутри payload.
+  // Это важно для предложений, созданных предыдущей версией Memory Update.
+  const candidates = await prisma.proposal.findMany({
+    where: {
+      projectId,
+      status: "PENDING",
+      entityType: { in: ["memory_update", "MEMORY_UPDATE"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  return candidates.find((proposal) => {
+    const payload = proposal.payload as any;
+    return proposal.sourceChapterId === chapterId || proposal.entityId === chapterId || payload?.chapterId === chapterId;
+  }) || null;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; chapterId: string }> }
@@ -22,18 +41,7 @@ export async function GET(
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: session.user.id }, select: { id: true } });
     if (!project) return NextResponse.json({ error: "Проект не найден." }, { status: 404 });
 
-    const proposal = await prisma.proposal.findFirst({
-      where: {
-        projectId,
-        status: "PENDING",
-        entityType: "memory_update",
-        OR: [
-          { sourceChapterId: chapterId },
-          { entityId: chapterId },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const proposal = await findPendingMemoryProposal(projectId, chapterId);
 
     return NextResponse.json({ ok: true, proposal });
   } catch (error) {
@@ -58,17 +66,7 @@ export async function POST(
     if (!chapter) return NextResponse.json({ error: "Глава не найдена." }, { status: 404 });
     if (chapter.status !== "CANON") return NextResponse.json({ error: "Memory Update можно запускать только после добавления главы в Canon." }, { status: 400 });
 
-    // Не создаём дубликаты. Если для главы уже есть PENDING proposal,
-    // возвращаем его и показываем автору на странице.
-    const existingProposal = await prisma.proposal.findFirst({
-      where: {
-        projectId,
-        status: "PENDING",
-        entityType: "memory_update",
-        OR: [{ sourceChapterId: chapter.id }, { entityId: chapter.id }],
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const existingProposal = await findPendingMemoryProposal(projectId, chapter.id);
 
     if (existingProposal) {
       const payload = existingProposal.payload as any;
