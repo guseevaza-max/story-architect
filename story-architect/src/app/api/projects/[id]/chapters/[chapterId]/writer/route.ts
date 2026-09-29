@@ -24,82 +24,122 @@ export async function POST(
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id, chapterId } = await params;
 
     const project = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: session.user.id,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
+      where: { id, userId: session.user.id },
+      select: { id: true, name: true },
     });
 
     if (!project) {
-      return NextResponse.json(
-        { error: "Проект не найден" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
     }
 
     const chapter = await prisma.chapter.findFirst({
-      where: {
-        id: chapterId,
-        book: {
-          projectId: project.id,
-        },
-      },
+      where: { id: chapterId, book: { projectId: project.id } },
       include: {
         book: true,
-        scenes: {
-          orderBy: {
-            order: "asc",
-          },
-        },
+        scenes: { orderBy: { order: "asc" } },
       },
     });
 
     if (!chapter) {
-      return NextResponse.json(
-        { error: "Глава не найдена" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Глава не найдена" }, { status: 404 });
     }
 
     if (!chapter.plan || !chapter.planApproved) {
       return NextResponse.json(
-        {
-          error: "Сначала необходимо утвердить план главы.",
-        },
+        { error: "Сначала необходимо утвердить план главы." },
         { status: 400 }
       );
     }
 
     if (!chapter.scenes || chapter.scenes.length === 0) {
       return NextResponse.json(
-        {
-          error: "Сначала необходимо сформировать план сцен.",
-        },
+        { error: "Сначала необходимо сформировать план сцен." },
         { status: 400 }
       );
     }
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
-        {
-          error: "OPENAI_API_KEY не настроен.",
-        },
+        { error: "OPENAI_API_KEY не настроен." },
         { status: 500 }
       );
     }
+
+    const [canonFacts, previousChapter, memoryChunks] = await Promise.all([
+      prisma.canonFact.findMany({
+        where: {
+          projectId: project.id,
+          status: "CANON",
+          OR: [
+            { validFromChapter: null },
+            { validFromChapter: { lte: chapter.number } },
+          ],
+          AND: [
+            {
+              OR: [
+                { validToChapter: null },
+                { validToChapter: { gte: chapter.number } },
+              ],
+            },
+          ],
+        },
+        select: {
+          statement: true,
+          negation: true,
+          entityType: true,
+          validFromChapter: true,
+          validToChapter: true,
+          importance: true,
+        },
+        orderBy: [{ importance: "desc" }, { createdAt: "desc" }],
+        take: 100,
+      }),
+
+      prisma.chapter.findFirst({
+        where: {
+          bookId: chapter.bookId,
+          number: { lt: chapter.number },
+          status: "CANON",
+        },
+        orderBy: { number: "desc" },
+        include: { chapterSummary: true },
+      }),
+
+      prisma.memoryChunk.findMany({
+        where: {
+          projectId: project.id,
+          OR: [{ chapterId: null }, { chapterId: { not: chapter.id } }],
+        },
+        select: { kind: true, content: true, metadata: true },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+    ]);
+
+    const canonContext = canonFacts.length
+      ? canonFacts
+          .map(
+            (fact, index) =>
+              `${index + 1}. ${fact.negation ? "НЕ " : ""}${fact.statement}`
+          )
+          .join("\n")
+      : "Подтверждённых Canon Facts пока нет.";
+
+    const previousChapterSummary = previousChapter?.chapterSummary
+      ? `Глава ${previousChapter.number}: ${previousChapter.title || "Без названия"}\n${previousChapter.chapterSummary.shortSummary}\n${previousChapter.chapterSummary.fullSummary || ""}`
+      : "Предыдущего сохранённого резюме нет.";
+
+    const memoryContext = memoryChunks.length
+      ? memoryChunks
+          .map((chunk, index) => `${index + 1}. [${chunk.kind}] ${chunk.content}`)
+          .join("\n\n")
+      : "Сохранённой долгосрочной памяти пока нет.";
 
     const scenes = chapter.scenes.map((scene) => ({
       order: scene.order,
@@ -111,124 +151,79 @@ export async function POST(
 
     const response = await openai.responses.create({
       model: "gpt-5.6-luna",
-
       input: [
         {
           role: "system",
           content: `
 Ты — AI Writer в системе Story Architect.
 
-Твоя задача — написать ЧЕРНОВИК главы на основе утверждённого
-плана главы и утверждённой структуры сцен.
+Напиши художественный ЧЕРНОВИК главы на основе утверждённого плана,
+плана сцен и подтверждённого Story Bible контекста.
 
-Автор является главным принимающим решения.
+ПРИОРИТЕТ:
+1. Подтверждённый Canon.
+2. Утверждённый план главы.
+3. Утверждённый план сцен.
+4. Идея автора.
+5. Предыдущая глава и Memory как исторический контекст.
 
-ПРИОРИТЕТ ИСТОЧНИКОВ:
-
-1. Утверждённый план главы.
-2. Утверждённый план сцен.
-3. Идея автора.
-
-ВАЖНЫЕ ПРАВИЛА:
-
-1. Пиши художественный черновик главы.
-2. Следуй последовательности сцен.
-3. Не пропускай обязательные события.
-4. Не нарушай ограничения из раздела "Не должно произойти".
-5. Не придумывай новые важные факты мира.
-6. Не придумывай новые фракции.
-7. Не придумывай новые важные способности.
-8. Не придумывай крупные события, которых нет в плане.
-9. Не раскрывай тайны, которые автор оставил неизвестными.
-10. Не превращай открытые вопросы в установленные факты.
-11. Если конкретная деталь неизвестна, оставь её неопределённой.
-12. Не меняй порядок сцен.
-13. Не меняй смысл утверждённого плана.
-14. Не завершай конфликт раньше времени.
-15. Не превращай черновик в окончательный Canon.
-16. Не добавляй комментарии автора или объяснения работы AI.
-17. Не пиши "согласно плану", "автор должен", "AI решил" и подобные фразы.
-18. Не пиши анализ вместо художественного текста.
-
-Текст должен ощущаться как настоящая глава книги,
-а не как пересказ плана.
-
-Каждая сцена должна естественно продолжать предыдущую.
-Действия персонажей должны иметь причинно-следственную связь.
-
-Если план оставляет вопрос открытым,
-не выдумывай окончательный ответ на этот вопрос.
-
-Напиши полноценный художественный черновик главы.
-
-Верни только текст главы.
+ПРАВИЛА:
+- Не нарушай Canon.
+- Не придумывай новые важные факты, фракции, способности или крупные события.
+- Не раскрывай неизвестные тайны.
+- Не превращай открытые вопросы в факты.
+- Учитывай состояние персонажей и причинно-следственную связь.
+- Не меняй порядок и смысл утверждённых сцен.
+- Не превращай черновик в Canon.
+- Верни только художественный текст главы.
 `,
         },
-
         {
           role: "user",
           content: `
-Проект:
-${project.name}
+Проект: ${project.name}
 
-Книга:
-${chapter.book.title || `Книга ${chapter.book.number}`}
+Книга: ${chapter.book.title || `Книга ${chapter.book.number}`}
+Глава: ${chapter.title || `Глава ${chapter.number}`}
+Цель главы: ${chapter.purpose || "Не указана"}
+Идея автора: ${chapter.authorIdea || "Не указана"}
 
-Глава:
-${chapter.title || `Глава ${chapter.number}`}
+CANON FACTS:
+${canonContext}
 
-Идея автора:
-${chapter.authorIdea || "Не указана"}
+ПРЕДЫДУЩАЯ ГЛАВА:
+${previousChapterSummary}
+
+LONG-TERM MEMORY:
+${memoryContext}
 
 УТВЕРЖДЁННЫЙ ПЛАН ГЛАВЫ:
-
 ${JSON.stringify(chapter.plan, null, 2)}
 
 УТВЕРЖДЁННЫЙ ПЛАН СЦЕН:
-
 ${JSON.stringify(scenes, null, 2)}
 
-Теперь напиши художественный черновик этой главы.
-
-Не добавляй заголовок главы.
-Не добавляй пояснения.
-Не добавляй комментарии.
 Верни только текст художественного черновика.
 `,
         },
       ],
-
-      text: {
-        format: {
-          type: "text",
-        },
-      },
+      text: { format: { type: "text" } },
     });
 
     const draftText = response.output_text?.trim();
 
     if (!draftText) {
       return NextResponse.json(
-        {
-          error: "AI не вернул текст черновика.",
-        },
+        { error: "AI не вернул текст черновика." },
         { status: 500 }
       );
     }
 
-    const wordCount = draftText
-      .split(/\s+/)
-      .filter(Boolean).length;
+    const wordCount = draftText.split(/\s+/).filter(Boolean).length;
 
     const updatedChapter = await prisma.chapter.update({
-      where: {
-        id: chapter.id,
-      },
-      data: {
-        draftText,
-        wordCount,
-        status: "DRAFT",
-      },
+      where: { id: chapter.id },
+      data: { draftText, wordCount, status: "DRAFT" },
     });
 
     return NextResponse.json({
@@ -239,11 +234,8 @@ ${JSON.stringify(scenes, null, 2)}
     });
   } catch (error) {
     console.error("Writer error:", error);
-
     return NextResponse.json(
-      {
-        error: "Не удалось создать черновик главы.",
-      },
+      { error: "Не удалось создать черновик главы." },
       { status: 500 }
     );
   }
