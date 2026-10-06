@@ -11,16 +11,12 @@ type ContinuityIssue = {
     | "IMPORTANT"
     | "USEFUL"
     | "OPTIONAL";
-
   category?: string;
   title?: string;
-
   evidence?: unknown;
   explanations?: unknown;
-
   confidence?: number | null;
   suggestedResolutions?: unknown;
-
   resolved?: boolean;
   resolution?: string | null;
 };
@@ -32,6 +28,24 @@ type ContinuityReport = {
   issues: ContinuityIssue[];
 };
 
+type Suggestion = {
+  title: string;
+  explanation: string;
+  changes: string[];
+  excerpt: string;
+};
+
+type SuggestionGroup = {
+  issueId: string;
+  problemTitle: string;
+  suggestions: Suggestion[];
+};
+
+type Preview = {
+  revisedDraft: string;
+  changeSummary: string;
+};
+
 export default function ContinuityButton({
   projectId,
   chapterId,
@@ -39,19 +53,33 @@ export default function ContinuityButton({
   projectId: string;
   chapterId: string;
 }) {
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [report, setReport] =
     useState<ContinuityReport | null>(null);
+
+  const [suggestionsLoading, setSuggestionsLoading] =
+    useState(false);
+  const [suggestionsLoaded, setSuggestionsLoaded] =
+    useState(false);
+  const [suggestionGroups, setSuggestionGroups] =
+    useState<SuggestionGroup[]>([]);
+  const [selectedSuggestions, setSelectedSuggestions] =
+    useState<Record<string, number>>({});
+
+  const [revisionLoading, setRevisionLoading] =
+    useState(false);
+  const [preview, setPreview] =
+    useState<Preview | null>(null);
 
   async function handleCheck() {
     setLoading(true);
     setError("");
     setReport(null);
+    setSuggestionsLoaded(false);
+    setSuggestionGroups([]);
+    setSelectedSuggestions({});
+    setPreview(null);
 
     try {
       const response = await fetch(
@@ -74,7 +102,6 @@ export default function ContinuityButton({
                   "Не удалось выполнить проверку."
               )
         );
-
         return;
       }
 
@@ -87,15 +114,231 @@ export default function ContinuityButton({
           "Проверка завершилась, но отчёт не был получен."
         );
       }
-    } catch (error) {
-      console.error(error);
-
-      setError(
-        "Ошибка соединения с сервером."
-      );
+    } catch (requestError) {
+      console.error(requestError);
+      setError("Ошибка соединения с сервером.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadSuggestions() {
+    if (!report || report.issues.length === 0) {
+      return;
+    }
+
+    try {
+      setSuggestionsLoading(true);
+      setError("");
+      setPreview(null);
+
+      const response = await fetch(
+        `/api/projects/${projectId}/chapters/${chapterId}/continuity/suggestions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        }
+      );
+
+      const responseText = await response.text();
+
+      let data: any = null;
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : null;
+      } catch {
+        throw new Error(
+          `API вернул не JSON. HTTP ${response.status}. Ответ: ${responseText.slice(
+            0,
+            300
+          )}`
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            `Ошибка API. HTTP ${response.status}`
+        );
+      }
+
+      const groups = Array.isArray(
+        data?.suggestions
+      )
+        ? data.suggestions
+        : [];
+
+      setSuggestionGroups(groups);
+      setSelectedSuggestions({});
+      setSuggestionsLoaded(true);
+    } catch (requestError) {
+      console.error(requestError);
+
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось получить предложения AI."
+      );
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }
+
+  function selectSuggestion(
+    issueId: string,
+    suggestionIndex: number
+  ) {
+    setSelectedSuggestions((current) => ({
+      ...current,
+      [issueId]: suggestionIndex,
+    }));
+
+    setPreview(null);
+    setError("");
+  }
+
+  async function prepareCombinedRevision() {
+    if (!report) {
+      return;
+    }
+
+    const selections = report.issues
+      .map((issue, index) => {
+        const issueId =
+          issue.id ?? String(index);
+
+        const suggestionIndex =
+          selectedSuggestions[issueId];
+
+        const group = suggestionGroups.find(
+          (item) => item.issueId === issueId
+        );
+
+        if (
+          suggestionIndex === undefined ||
+          !group?.suggestions[suggestionIndex]
+        ) {
+          return null;
+        }
+
+        return {
+          issueId,
+          problemTitle:
+            group.problemTitle ||
+            issue.title ||
+            "Проблема",
+          suggestion:
+            group.suggestions[
+              suggestionIndex
+            ],
+        };
+      })
+      .filter(Boolean);
+
+    if (selections.length === 0) {
+      setError(
+        "Сначала выбери хотя бы одно предложение исправления."
+      );
+      return;
+    }
+
+    try {
+      setRevisionLoading(true);
+      setError("");
+      setPreview(null);
+
+      const response = await fetch(
+        `/api/projects/${projectId}/chapters/${chapterId}/continuity/apply-suggestions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            selections,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Не удалось подготовить общее исправление."
+        );
+      }
+
+      setPreview({
+        revisedDraft: data.revisedDraft,
+        changeSummary: data.changeSummary,
+      });
+    } catch (requestError) {
+      console.error(requestError);
+
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось подготовить общее исправление."
+      );
+    } finally {
+      setRevisionLoading(false);
+    }
+  }
+
+  async function acceptCombinedRevision() {
+    if (!preview?.revisedDraft?.trim()) {
+      return;
+    }
+
+    try {
+      setRevisionLoading(true);
+      setError("");
+
+      const response = await fetch(
+        `/api/projects/${projectId}/chapters/${chapterId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            draftText: preview.revisedDraft,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Не удалось сохранить исправленный черновик."
+        );
+      }
+
+      window.location.reload();
+    } catch (requestError) {
+      console.error(requestError);
+
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось сохранить исправленный черновик."
+      );
+    } finally {
+      setRevisionLoading(false);
+    }
+  }
+
+  function cancelPreview() {
+    setPreview(null);
+    setError("");
   }
 
   function getStatusLabel(
@@ -142,9 +385,7 @@ export default function ContinuityButton({
     };
   }
 
-  function readJsonText(
-    value: unknown
-  ): string {
+  function readJsonText(value: unknown): string {
     if (
       value === null ||
       value === undefined
@@ -164,13 +405,11 @@ export default function ContinuityButton({
     }
 
     try {
-      const json = JSON.stringify(
+      return JSON.stringify(
         value,
         null,
         2
-      );
-
-      return json ?? "";
+      ) ?? "";
     } catch {
       return String(value);
     }
@@ -182,8 +421,7 @@ export default function ContinuityButton({
     if (
       issue.explanations !== null &&
       issue.explanations !== undefined &&
-      typeof issue.explanations ===
-        "object" &&
+      typeof issue.explanations === "object" &&
       !Array.isArray(
         issue.explanations
       )
@@ -196,6 +434,9 @@ export default function ContinuityButton({
 
     return null;
   }
+
+  const selectedCount =
+    Object.keys(selectedSuggestions).length;
 
   return (
     <div>
@@ -248,10 +489,6 @@ export default function ContinuityButton({
             overflow: "hidden",
           }}
         >
-          {/* =================================================
-              РЕЗУЛЬТАТ ПРОВЕРКИ
-              ================================================= */}
-
           <div
             style={{
               padding: 18,
@@ -269,11 +506,7 @@ export default function ContinuityButton({
                 flexWrap: "wrap",
               }}
             >
-              <strong
-                style={{
-                  fontSize: 16,
-                }}
-              >
+              <strong style={{ fontSize: 16 }}>
                 🔍 Результат проверки
               </strong>
 
@@ -318,10 +551,6 @@ export default function ContinuityButton({
             </p>
           </div>
 
-          {/* =================================================
-              ПРОБЛЕМЫ
-              ================================================= */}
-
           {report.issues.length === 0 ? (
             <div
               style={{
@@ -336,11 +565,7 @@ export default function ContinuityButton({
               обнаружено.
             </div>
           ) : (
-            <div
-              style={{
-                padding: 18,
-              }}
-            >
+            <div style={{ padding: 18 }}>
               <div
                 style={{
                   marginBottom: 14,
@@ -349,10 +574,27 @@ export default function ContinuityButton({
                 }}
               >
                 Найдено проблем:{" "}
-                {String(
-                  report.issues.length
-                )}
+                {report.issues.length}
               </div>
+
+              {!suggestionsLoaded && (
+                <div
+                  style={{
+                    marginBottom: 14,
+                    padding: 12,
+                    borderRadius: 8,
+                    background: "#f3f7fb",
+                    color: "#315a7d",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  💡 Для любой найденной проблемы
+                  можно запросить варианты
+                  исправления. Они появятся прямо
+                  под соответствующей проблемой.
+                </div>
+              )}
 
               <div
                 style={{
@@ -363,9 +605,9 @@ export default function ContinuityButton({
               >
                 {report.issues.map(
                   (issue, index) => {
-                    // -----------------------------------------
-                    // Severity
-                    // -----------------------------------------
+                    const issueId =
+                      issue.id ??
+                      String(index);
 
                     const severityValue =
                       issue.severity ??
@@ -381,10 +623,6 @@ export default function ContinuityButton({
                       String(
                         severityValue
                       );
-
-                    // -----------------------------------------
-                    // Severity style
-                    // -----------------------------------------
 
                     const severityStyle =
                       severityText === "HIGH"
@@ -409,10 +647,6 @@ export default function ContinuityButton({
                               "#666",
                           };
 
-                    // -----------------------------------------
-                    // Основные значения
-                    // -----------------------------------------
-
                     const categoryText =
                       issue.category
                         ? String(
@@ -426,10 +660,6 @@ export default function ContinuityButton({
                             issue.title
                           )
                         : "Проблема";
-
-                    // -----------------------------------------
-                    // Explanation
-                    // -----------------------------------------
 
                     const explanation =
                       getExplanation(
@@ -466,11 +696,23 @@ export default function ContinuityButton({
                           )
                         : "";
 
+                    const group =
+                      suggestionGroups.find(
+                        (item) =>
+                          item.issueId ===
+                          issueId
+                      );
+
+                    const selectedIndex =
+                      selectedSuggestions[
+                        issueId
+                      ];
+
                     return (
                       <div
                         key={
                           issue.id ??
-                          `${index}-${categoryText || "issue"}`
+                          `${index}-issue`
                         }
                         style={{
                           border:
@@ -479,8 +721,6 @@ export default function ContinuityButton({
                           padding: 16,
                         }}
                       >
-                        {/* Заголовок */}
-
                         <div
                           style={{
                             display: "flex",
@@ -497,10 +737,7 @@ export default function ContinuityButton({
                               lineHeight: 1.5,
                             }}
                           >
-                            {String(
-                              index + 1
-                            )}
-                            .{" "}
+                            {index + 1}.{" "}
                             {titleText}
                           </strong>
 
@@ -523,8 +760,6 @@ export default function ContinuityButton({
                           </span>
                         </div>
 
-                        {/* Категория */}
-
                         {categoryText && (
                           <div
                             style={{
@@ -539,8 +774,6 @@ export default function ContinuityButton({
                           </div>
                         )}
 
-                        {/* Место */}
-
                         {locationText && (
                           <div
                             style={{
@@ -554,8 +787,6 @@ export default function ContinuityButton({
                             {locationText}
                           </div>
                         )}
-
-                        {/* Evidence */}
 
                         {issue.evidence !==
                           null &&
@@ -594,8 +825,6 @@ export default function ContinuityButton({
                             </div>
                           )}
 
-                        {/* Recommendation */}
-
                         {recommendationText && (
                           <div
                             style={{
@@ -628,8 +857,6 @@ export default function ContinuityButton({
                           </div>
                         )}
 
-                        {/* Explanations */}
-
                         {!locationText &&
                           !recommendationText &&
                           explanation && (
@@ -653,14 +880,452 @@ export default function ContinuityButton({
                               )}
                             </div>
                           )}
+
+                        <div
+                          style={{
+                            marginTop: 14,
+                            paddingTop: 14,
+                            borderTop:
+                              "1px solid #eee",
+                          }}
+                        >
+                          {!suggestionsLoaded ? (
+                            <button
+                              type="button"
+                              onClick={
+                                loadSuggestions
+                              }
+                              disabled={
+                                suggestionsLoading ||
+                                revisionLoading
+                              }
+                              style={{
+                                padding:
+                                  "9px 13px",
+                                borderRadius: 7,
+                                border:
+                                  "1px solid #315a7d",
+                                background:
+                                  "#f3f7fb",
+                                color:
+                                  "#315a7d",
+                                cursor:
+                                  suggestionsLoading ||
+                                  revisionLoading
+                                    ? "default"
+                                    : "pointer",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {suggestionsLoading
+                                ? "⏳ AI готовит варианты..."
+                                : "💡 Предложить исправление"}
+                            </button>
+                          ) : group &&
+                            group.suggestions
+                              .length > 0 ? (
+                            <div>
+                              <div
+                                style={{
+                                  marginBottom:
+                                    10,
+                                  fontWeight: 700,
+                                  color:
+                                    "#315a7d",
+                                }}
+                              >
+                                💡 Варианты
+                                исправления
+                              </div>
+
+                              {group.suggestions.map(
+                                (
+                                  suggestion,
+                                  suggestionIndex
+                                ) => {
+                                  const selected =
+                                    selectedIndex ===
+                                    suggestionIndex;
+
+                                  return (
+                                    <button
+                                      key={
+                                        suggestionIndex
+                                      }
+                                      type="button"
+                                      onClick={() =>
+                                        selectSuggestion(
+                                          issueId,
+                                          suggestionIndex
+                                        )
+                                      }
+                                      disabled={
+                                        revisionLoading
+                                      }
+                                      style={{
+                                        display:
+                                          "block",
+                                        width:
+                                          "100%",
+                                        textAlign:
+                                          "left",
+                                        marginBottom:
+                                          8,
+                                        padding:
+                                          12,
+                                        borderRadius:
+                                          8,
+                                        border:
+                                          selected
+                                            ? "2px solid #166534"
+                                            : "1px solid #ddd",
+                                        background:
+                                          selected
+                                            ? "#f0fdf4"
+                                            : "#fff",
+                                        cursor:
+                                          revisionLoading
+                                            ? "default"
+                                            : "pointer",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display:
+                                            "flex",
+                                          gap: 8,
+                                          alignItems:
+                                            "center",
+                                          marginBottom:
+                                            6,
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            width:
+                                              22,
+                                            height:
+                                              22,
+                                            borderRadius:
+                                              "50%",
+                                            display:
+                                              "inline-flex",
+                                            alignItems:
+                                              "center",
+                                            justifyContent:
+                                              "center",
+                                            background:
+                                              selected
+                                                ? "#166534"
+                                                : "#eee",
+                                            color:
+                                              selected
+                                                ? "#fff"
+                                                : "#555",
+                                            fontSize:
+                                              12,
+                                            fontWeight:
+                                              700,
+                                          }}
+                                        >
+                                          {selected
+                                            ? "✓"
+                                            : suggestionIndex +
+                                              1}
+                                        </span>
+
+                                        <strong>
+                                          {
+                                            suggestion.title
+                                          }
+                                        </strong>
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          marginLeft:
+                                            30,
+                                          color:
+                                            "#555",
+                                          fontSize:
+                                            13,
+                                          lineHeight:
+                                            1.5,
+                                        }}
+                                      >
+                                        {
+                                          suggestion.explanation
+                                        }
+                                      </div>
+
+                                      {suggestion.changes
+                                        ?.length >
+                                        0 && (
+                                        <ul
+                                          style={{
+                                            margin:
+                                              "8px 0 0 46px",
+                                            padding: 0,
+                                            color:
+                                              "#555",
+                                            fontSize:
+                                              12,
+                                          }}
+                                        >
+                                          {suggestion.changes.map(
+                                            (
+                                              change,
+                                              changeIndex
+                                            ) => (
+                                              <li
+                                                key={
+                                                  changeIndex
+                                                }
+                                                style={{
+                                                  marginBottom:
+                                                    3,
+                                                }}
+                                              >
+                                                {
+                                                  change
+                                                }
+                                              </li>
+                                            )
+                                          )}
+                                        </ul>
+                                      )}
+
+                                      {suggestion.excerpt && (
+                                        <div
+                                          style={{
+                                            marginTop:
+                                              8,
+                                            marginLeft:
+                                              30,
+                                            padding:
+                                              8,
+                                            borderRadius:
+                                              6,
+                                            background:
+                                              "#f7f7f7",
+                                            color:
+                                              "#555",
+                                            fontSize:
+                                              12,
+                                            fontStyle:
+                                              "italic",
+                                          }}
+                                        >
+                                          «
+                                          {
+                                            suggestion.excerpt
+                                          }
+                                          »
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                }
+                              )}
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                padding: 10,
+                                borderRadius: 7,
+                                background:
+                                  "#f8fafc",
+                                color: "#666",
+                                fontSize: 13,
+                              }}
+                            >
+                              AI не предложил
+                              отдельного варианта
+                              для этой проблемы.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   }
                 )}
               </div>
+
+              {suggestionsLoaded &&
+                selectedCount > 0 && (
+                  <div
+                    style={{
+                      marginTop: 18,
+                      padding: 18,
+                      borderRadius: 10,
+                      background: "#f7fff8",
+                      border:
+                        "2px solid #b8d8bf",
+                    }}
+                  >
+                    <h4
+                      style={{
+                        margin: "0 0 8px",
+                      }}
+                    >
+                      🛠 Общее исправление
+                    </h4>
+
+                    <p
+                      style={{
+                        margin:
+                          "0 0 14px",
+                        color: "#666",
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Выбранные варианты будут
+                      применены AI одновременно.
+                      Сначала появится
+                      предпросмотр — исходный
+                      черновик не изменится.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={
+                        prepareCombinedRevision
+                      }
+                      disabled={
+                        revisionLoading
+                      }
+                      style={{
+                        padding:
+                          "11px 18px",
+                        borderRadius: 8,
+                        border: "none",
+                        background:
+                          revisionLoading
+                            ? "#aaa"
+                            : "#166534",
+                        color: "#fff",
+                        cursor:
+                          revisionLoading
+                            ? "default"
+                            : "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {revisionLoading
+                        ? "⏳ AI готовит исправление..."
+                        : `✏️ Подготовить общее исправление (${selectedCount})`}
+                    </button>
+                  </div>
+                )}
             </div>
           )}
         </div>
+      )}
+
+      {preview && (
+        <section
+          style={{
+            marginTop: 20,
+            padding: 18,
+            borderRadius: 10,
+            border:
+              "2px solid #9bb7d4",
+            background: "#f8fbff",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>
+            👀 Предпросмотр исправления
+          </h3>
+
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 14,
+              borderRadius: 8,
+              background: "#fff",
+              border: "1px solid #ddd",
+              whiteSpace: "pre-wrap",
+              lineHeight: 1.7,
+              maxHeight: 600,
+              overflowY: "auto",
+            }}
+          >
+            {preview.revisedDraft}
+          </div>
+
+          <div
+            style={{
+              marginBottom: 18,
+              padding: 14,
+              borderRadius: 8,
+              background: "#f3f3f3",
+              fontSize: 14,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>Что изменилось:</strong>
+
+            <div style={{ marginTop: 6 }}>
+              {preview.changeSummary}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={
+                acceptCombinedRevision
+              }
+              disabled={revisionLoading}
+              style={{
+                padding: "11px 18px",
+                borderRadius: 8,
+                border: "none",
+                background:
+                  revisionLoading
+                    ? "#aaa"
+                    : "#166534",
+                color: "#fff",
+                cursor:
+                  revisionLoading
+                    ? "default"
+                    : "pointer",
+                fontWeight: 600,
+              }}
+            >
+              {revisionLoading
+                ? "⏳ Сохраняем..."
+                : "✓ Принять исправление"}
+            </button>
+
+            <button
+              type="button"
+              onClick={cancelPreview}
+              disabled={revisionLoading}
+              style={{
+                padding: "11px 18px",
+                borderRadius: 8,
+                border:
+                  "1px solid #ccc",
+                background: "#fff",
+                color: "#222",
+                cursor:
+                  revisionLoading
+                    ? "default"
+                    : "pointer",
+              }}
+            >
+              Отменить
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );
