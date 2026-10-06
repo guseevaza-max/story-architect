@@ -8,7 +8,6 @@ import SaveIdeaForm from "./SaveIdeaForm";
 import ScenePlannerButton from "./ScenePlannerButton";
 import WriterButton from "./writerButton";
 import ContinuityButton from "./ContinuityButton";
-import ContinuitySuggestionsButton from "./ContinuitySuggestionsButton";
 import DraftEditor from "./DraftEditor";
 import ApproveChapterButton from "./ApproveChapterButton";
 import CanonChapterButton from "./CanonChapterButton";
@@ -224,7 +223,6 @@ export default async function ChapterPage({
             <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14, lineHeight: 1.5 }}>AI проверяет текущий черновик на противоречия с планом, сценами и внутренней логикой истории.</p>
           </div>
           <ContinuityButton projectId={project.id} chapterId={chapter.id} />
-          <ContinuitySuggestionsButton projectId={project.id} chapterId={chapter.id} />
         </section>
       )}
 
