@@ -8,6 +8,7 @@ import SaveIdeaForm from "./SaveIdeaForm";
 import ScenePlannerButton from "./ScenePlannerButton";
 import WriterButton from "./writerButton";
 import ContinuityButton from "./ContinuityButton";
+import ContinuitySuggestionsButton from "./ContinuitySuggestionsButton";
 import DraftEditor from "./DraftEditor";
 import ApproveChapterButton from "./ApproveChapterButton";
 import CanonChapterButton from "./CanonChapterButton";
