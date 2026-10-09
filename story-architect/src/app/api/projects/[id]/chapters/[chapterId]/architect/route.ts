@@ -6,7 +6,10 @@ import {
   ProposalOp,
 } from "@prisma/client";
 import { auth } from "@/auth";
-import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
+import {
+  buildStoryStateWithStats,
+  memoryChunksBefore,
+} from "@/lib/context/storyState";
 
 const prisma = new PrismaClient();
 
@@ -278,7 +281,8 @@ ${
         : "Сохранённой долгосрочной памяти пока нет.";
 
     // Накопленное состояние персонажей и отношений на начало главы.
-    const storyState = await buildStoryState(storyRef);
+    const storyStats = await buildStoryStateWithStats(storyRef);
+    const storyState = storyStats.text;
 
     // =====================================================
     // 9. SYSTEM PROMPT
@@ -637,6 +641,12 @@ TASK
                 previousChapter
                   ? previousChapter.number
                   : null,
+
+              storyStateCharacters:
+                storyStats.characters,
+
+              storyStateRelationships:
+                storyStats.relationships,
             },
           },
 
@@ -648,6 +658,17 @@ TASK
 
             memoryChunks:
               memoryChunks.length,
+
+            storyState: {
+              characters:
+                storyStats.characters,
+              states:
+                storyStats.states,
+              relationships:
+                storyStats.relationships,
+              chars:
+                storyState.length,
+            },
 
             previousChapter:
               previousChapter
@@ -727,6 +748,15 @@ TASK
 
         memoryChunks:
           memoryChunks.length,
+
+        storyState: {
+          characters:
+            storyStats.characters,
+          states:
+            storyStats.states,
+          relationships:
+            storyStats.relationships,
+        },
 
         previousChapter:
           previousChapter

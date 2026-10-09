@@ -39,8 +39,13 @@ export default function ArchitectButton({
         return;
       }
 
+      const state = data.context?.storyState;
+
       setMessage(
-        "Architect завершил анализ. Предложение создано и ожидает утверждения."
+        "Architect завершил анализ. Предложение создано и ожидает утверждения." +
+          (state
+            ? ` В контекст вошло: персонажей ${state.characters}, состояний ${state.states}, отношений ${state.relationships}.`
+            : "")
       );
 
       router.refresh();

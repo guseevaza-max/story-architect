@@ -43,6 +43,14 @@ export function memoryChunksBefore(
   };
 }
 
+/** Сколько данных попало в контекст — для отладки и интерфейса. */
+export type StoryStateResult = {
+  text: string;
+  characters: number;
+  states: number;
+  relationships: number;
+};
+
 /**
  * Накопленное состояние истории на начало главы:
  * подтверждённые (CANON) персонажи, их последние состояния
@@ -52,6 +60,15 @@ export async function buildStoryState(
   ref: StoryStateRef,
   options: { maxChars?: number } = {}
 ): Promise<string> {
+  const result = await buildStoryStateWithStats(ref, options);
+  return result.text;
+}
+
+/** То же, что buildStoryState, но с количеством найденных записей. */
+export async function buildStoryStateWithStats(
+  ref: StoryStateRef,
+  options: { maxChars?: number } = {}
+): Promise<StoryStateResult> {
   const before = chaptersBefore(ref);
 
   const [characters, states, relationships] = await Promise.all([
@@ -147,10 +164,15 @@ export async function buildStoryState(
     });
   }
 
-  return formatStoryState(
-    stateCharacters,
-    stateRows,
-    stateRelationships,
-    options.maxChars
-  );
+  return {
+    text: formatStoryState(
+      stateCharacters,
+      stateRows,
+      stateRelationships,
+      options.maxChars
+    ),
+    characters: stateCharacters.length,
+    states: stateRows.length,
+    relationships: stateRelationships.length,
+  };
 }
