@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
 import OpenAI from "openai";
-
-const prisma = new PrismaClient();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -575,15 +574,22 @@ ${chapter.draftText}
     // =====================================================
 
     try {
-      await prisma.chapter.update({
-        where: {
-          id: chapter.id,
-        },
+      // Проверку можно запускать и для утверждённой главы,
+      // но статус APPROVED / CANON она понижать не должна.
+      if (
+        chapter.status !== "APPROVED" &&
+        chapter.status !== "CANON"
+      ) {
+        await prisma.chapter.update({
+          where: {
+            id: chapter.id,
+          },
 
-        data: {
-          status: "CHECKING",
-        },
-      });
+          data: {
+            status: "CHECKING",
+          },
+        });
+      }
     } catch (error) {
       console.error(
         "Chapter status update error:",
