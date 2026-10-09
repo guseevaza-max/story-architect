@@ -245,6 +245,72 @@ export default async function ProjectPage({
 
           <strong>Открыть Memory →</strong>
         </Link>
+
+        {/* Relationships */}
+        <Link
+          href={`/projects/${project.id}/relationships`}
+          style={{
+            display: "block",
+            textDecoration: "none",
+            color: "inherit",
+            border: "1px solid #ddd",
+            borderRadius: 14,
+            padding: 24,
+            background: "#fff",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>🤝 Relationships</h2>
+
+          <p style={{ color: "#666", lineHeight: 1.6 }}>
+            Действующие отношения персонажей и история их изменений.
+          </p>
+
+          <strong>Открыть отношения →</strong>
+        </Link>
+
+        {/* Plot Lines */}
+        <Link
+          href={`/projects/${project.id}/plot-lines`}
+          style={{
+            display: "block",
+            textDecoration: "none",
+            color: "inherit",
+            border: "1px solid #ddd",
+            borderRadius: 14,
+            padding: 24,
+            background: "#fff",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>🧵 Plot Lines</h2>
+
+          <p style={{ color: "#666", lineHeight: 1.6 }}>
+            Сюжетные линии, их этапы и прогресс по главам.
+          </p>
+
+          <strong>Открыть линии →</strong>
+        </Link>
+
+        {/* Timeline */}
+        <Link
+          href={`/projects/${project.id}/timeline`}
+          style={{
+            display: "block",
+            textDecoration: "none",
+            color: "inherit",
+            border: "1px solid #ddd",
+            borderRadius: 14,
+            padding: 24,
+            background: "#fff",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>🕰️ Timeline</h2>
+
+          <p style={{ color: "#666", lineHeight: 1.6 }}>
+            События истории в хронологическом порядке.
+          </p>
+
+          <strong>Открыть таймлайн →</strong>
+        </Link>
       </section>
     </main>
   );
