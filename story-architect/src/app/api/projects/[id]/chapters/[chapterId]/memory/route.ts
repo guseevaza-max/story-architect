@@ -1,581 +1,3853 @@
 import { NextResponse } from "next/server";
+
+
+
 import { Prisma, PrismaClient } from "@prisma/client";
+
+
+
 import { auth } from "@/auth";
+
+
+
 import OpenAI from "openai";
+
+
+
+
+
+
 
 const prisma = new PrismaClient();
 
+
+
+
+
+
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+
+
+
+  apiKey: process.env.OPENAI_API_KEY,
+
+
+
 });
 
+
+
+
+
+
+
 function toInputJson(
-  value: unknown
+
+
+
+  value: unknown
+
+
+
 ): Prisma.InputJsonValue {
-  return JSON.parse(
-    JSON.stringify(value)
-  ) as Prisma.InputJsonValue;
+
+
+
+  return JSON.parse(
+
+
+
+    JSON.stringify(value)
+
+
+
+  ) as Prisma.InputJsonValue;
+
+
+
 }
 
+
+
+
+
+
+
 export async function POST(
-  request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{
-      id: string;
-      chapterId: string;
-    }>;
-  }
+
+
+
+  request: Request,
+
+
+
+  {
+
+
+
+    params,
+
+
+
+  }: {
+
+
+
+    params: Promise<{
+
+
+
+      id: string;
+
+
+
+      chapterId: string;
+
+
+
+    }>;
+
+
+
+  }
+
+
+
 ) {
-  try {
-    // =====================================================
-    // 1. АВТОРИЗАЦИЯ
-    // =====================================================
 
-    const session = await auth();
 
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        {
-          error: "Не авторизован.",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
 
-    const {
-      id: projectId,
-      chapterId,
-    } = await params;
+  try {
 
-    // =====================================================
-    // 2. ПРОЕКТ
-    // =====================================================
 
-    const project =
-      await prisma.project.findFirst({
-        where: {
-          id: projectId,
-          userId: session.user.id,
-        },
-      });
 
-    if (!project) {
-      return NextResponse.json(
-        {
-          error: "Проект не найден.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
+    // =====================================================
 
-    // =====================================================
-    // 3. ГЛАВА
-    // =====================================================
 
-    const chapter =
-      await prisma.chapter.findFirst({
-        where: {
-          id: chapterId,
-          book: {
-            projectId: projectId,
-          },
-        },
-        include: {
-          book: true,
-        },
-      });
 
-    if (!chapter) {
-      return NextResponse.json(
-        {
-          error: "Глава не найдена.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
+    // 1. АВТОРИЗАЦИЯ
 
-    // =====================================================
-    // 4. ГЛАВА ДОЛЖНА БЫТЬ В CANON
-    // =====================================================
 
-    if (chapter.status !== "CANON") {
-      return NextResponse.json(
-        {
-          error:
-            "Memory Update можно запускать только после добавления главы в Canon.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
 
-    // =====================================================
-    // 5. ТЕКСТ ГЛАВЫ
-    // =====================================================
+    // =====================================================
 
-    const chapterText =
-      chapter.finalText?.trim() ||
-      chapter.draftText?.trim();
 
-    if (!chapterText) {
-      return NextResponse.json(
-        {
-          error:
-            "У главы нет утверждённого текста.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
 
-    // =====================================================
-    // 6. OPENAI KEY
-    // =====================================================
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        {
-          error:
-            "OPENAI_API_KEY не настроен.",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
 
-    // =====================================================
-    // 7. AI MEMORY EXTRACTION
-    // =====================================================
 
-    const startedAt = Date.now();
 
-    const response =
-      await openai.responses.create({
-        model: "gpt-5.6-luna",
+    const session = await auth();
 
-        input: [
-          {
-            role: "system",
-            content: `
+
+
+
+
+
+
+    if (!session?.user?.id) {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error: "Не авторизован.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 401,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    const {
+
+
+
+      id: projectId,
+
+
+
+      chapterId,
+
+
+
+    } = await params;
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 2. ПРОЕКТ
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const project =
+
+
+
+      await prisma.project.findFirst({
+
+
+
+        where: {
+
+
+
+          id: projectId,
+
+
+
+          userId: session.user.id,
+
+
+
+        },
+
+
+
+      });
+
+
+
+
+
+
+
+    if (!project) {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error: "Проект не найден.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 404,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 3. ГЛАВА
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const chapter =
+
+
+
+      await prisma.chapter.findFirst({
+
+
+
+        where: {
+
+
+
+          id: chapterId,
+
+
+
+          book: {
+
+
+
+            projectId,
+
+
+
+          },
+
+
+
+        },
+
+
+
+        include: {
+
+
+
+          book: true,
+
+
+
+        },
+
+
+
+      });
+
+
+
+
+
+
+
+    if (!chapter) {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error: "Глава не найдена.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 404,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 4. ГЛАВА ДОЛЖНА БЫТЬ CANON
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    if (chapter.status !== "CANON") {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error:
+
+
+
+            "Memory Update можно запускать только после добавления главы в Canon.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 400,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 5. ТЕКСТ ГЛАВЫ
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const chapterText =
+
+
+
+      chapter.finalText?.trim() ||
+
+
+
+      chapter.draftText?.trim();
+
+
+
+
+
+
+
+    if (!chapterText) {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error:
+
+
+
+            "У главы нет утверждённого текста.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 400,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 6. OPENAI KEY
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    if (!process.env.OPENAI_API_KEY) {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error:
+
+
+
+            "OPENAI_API_KEY не настроен.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 500,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 7. ПОЛУЧАЕМ CANON-ПЕРСОНАЖЕЙ
+
+
+
+    //
+
+
+
+    // AI должен знать, кто уже существует.
+
+
+
+    // Иначе он будет воспринимать Каэля как нового персонажа.
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const characters =
+
+
+
+      await prisma.character.findMany({
+
+
+
+        where: {
+
+
+
+          projectId,
+
+
+
+          status: "CANON",
+
+
+
+        },
+
+
+
+        select: {
+
+
+
+          id: true,
+
+
+
+          name: true,
+
+
+
+          role: true,
+
+
+
+          description: true,
+
+
+
+          personality: true,
+
+
+
+          goals: true,
+
+
+
+          abilities: true,
+
+
+
+        },
+
+
+
+        orderBy: {
+
+
+
+          createdAt: "asc",
+
+
+
+        },
+
+
+
+      });
+
+
+
+
+
+
+
+    const charactersContext =
+
+
+
+      characters.length > 0
+
+
+
+        ? characters
+
+
+
+            .map(
+
+
+
+              (character) => `
+
+
+
+CHARACTER:
+
+
+
+Имя: ${character.name}
+
+
+
+Роль: ${character.role || "не указана"}
+
+
+
+Описание: ${character.description || "не указано"}
+
+
+
+Характер: ${character.personality || "не указан"}
+
+
+
+Цели: ${character.goals || "не указаны"}
+
+
+
+Способности: ${
+
+
+
+                character.abilities
+
+
+
+                  ? JSON.stringify(
+
+
+
+                      character.abilities
+
+
+
+                    )
+
+
+
+                  : "не указаны"
+
+
+
+              }
+
+
+
+`
+
+
+
+            )
+
+
+
+            .join("\n")
+
+
+
+        : "CANON-персонажей пока нет.";
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 8. AI MEMORY EXTRACTION
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const startedAt = Date.now();
+
+
+
+
+
+
+
+    const response =
+
+
+
+      await openai.responses.create({
+
+
+
+        model: "gpt-5.6-luna",
+
+
+
+
+
+
+
+        input: [
+
+
+
+          {
+
+
+
+            role: "system",
+
+
+
+            content: `
+
+
+
 Ты — MEMORY EXTRACTION AGENT системы Story Architect.
 
+
+
+
+
+
+
 Твоя задача — анализировать УТВЕРЖДЁННУЮ главу книги и определить,
+
+
+
 какие изменения должны попасть в память истории.
+
+
+
+
+
+
 
 КАТЕГОРИИ ИЗМЕНЕНИЙ:
 
-1. FACT
+
+
+
+
+
+
+1\. FACT
+
+
+
 Новый важный факт.
 
-2. CHARACTER_CHANGE
-Изменение состояния персонажа:
-характер, знания, способности, положение, цель,
-убеждения, отношения и т.д.
 
-3. RELATIONSHIP_CHANGE
+
+
+
+
+
+2\. CHARACTER_CHANGE
+
+
+
+Изменение состояния существующего персонажа:
+
+
+
+характер, знания, способности, положение, цель,
+
+
+
+убеждения, мировоззрение, репутация, влияние,
+
+
+
+местоположение, имущество, жизненное состояние
+
+
+
+и другие устойчивые характеристики.
+
+
+
+
+
+
+
+3\. RELATIONSHIP_CHANGE
+
+
+
 Изменение отношений между персонажами.
 
-4. WORLD_CHANGE
+
+
+
+
+
+
+4\. WORLD_CHANGE
+
+
+
 Новое состояние мира, локации, организации,
+
+
+
 правила мира или другие важные изменения.
 
-5. EVENT
+
+
+
+
+
+
+5\. EVENT
+
+
+
 Событие, которое произошло в истории.
 
-6. PLOT_PROGRESS
+
+
+
+
+
+
+6\. PLOT_PROGRESS
+
+
+
 Продвижение сюжетной линии.
 
-7. SECRET
+
+
+
+
+
+
+7\. SECRET
+
+
+
 Новая тайна или изменение существующей тайны.
 
-8. FORESHADOWING
+
+
+
+
+
+
+8\. FORESHADOWING
+
+
+
 Новая зацепка, обещание или foreshadowing.
 
-9. QUESTION
+
+
+
+
+
+
+9\. QUESTION
+
+
+
 Вопрос, который остаётся открытым после главы.
 
-10. NEW_ENTITY
+
+
+
+
+
+
+10\. NEW_ENTITY
+
+
+
 Новая сущность, которую система потенциально должна
+
+
+
 добавить в Story Bible.
+
+
+
+
+
+
+
+ОСОБОЕ ПРАВИЛО ДЛЯ НОВЫХ ПЕРСОНАЖЕЙ:
+
+
+
+characterProposals создавай ТОЛЬКО тогда, когда новый персонаж действительно идентифицирован как отдельная личность и его появление важно для продолжения истории.
+
+
+
+Не создавай characterProposal для безымянной или неидентифицированной фигуры, случайного прохожего, неизвестного человека, мужчины, женщины, охранника, рабочего, силуэта, наблюдателя, голоса или другой роли/описания, если текст главы не позволяет уверенно установить, что это конкретный отдельный персонаж. Такие упоминания можно сохранить как EVENT, FACT, NEW_ENTITY или другой подходящий update, но НЕ как characterProposal.
+
+
+
+Если персонаж только подозревается или его личность неизвестна, это НЕ новый персонаж для characterProposals. Не превращай неизвестную фигуру в персонажа только потому, что она совершает действие.
+
+
+
+Если новый персонаж действительно идентифицирован, которого НЕТ среди CANON-ПЕРСОНАЖЕЙ, создай отдельный объект в массиве characterProposals и также создай update с type = "NEW_ENTITY".
+
+
+
+characterProposals предназначен только для новых, индивидуально идентифицированных персонажей. Не добавляй туда Каэля, Марка или другого уже существующего CANON-персонажа.
+
+
+
+Указывай только сведения, подтверждённые текстом главы. Неизвестные поля оставляй пустыми, abilities — пустым списком.
+
+
 
 ВАЖНЫЕ ПРАВИЛА:
 
-- Не выдумывай информацию.
-- Используй только то, что подтверждается текстом главы.
-- Не считай предположение фактом.
-- Если информация неоднозначна — ставь safety = "UNCERTAIN".
-- Если информация потенциально противоречит существующему
-  Canon — ставь safety = "CONFLICT".
-- Если информация явно подтверждается текстом и не выглядит
-  противоречивой — safety = "SAFE".
-- Не изменяй Canon.
-- Не удаляй существующие факты.
-- Не создавай новые сущности без основания в тексте.
-- Не включай обычные мелкие детали, которые не будут полезны
-  для будущих глав.
-- Выделяй только информацию, которая может быть важна
-  для продолжения истории.
+
+
+
+
+
+
+\- Не выдумывай информацию.
+
+
+
+\- Используй только то, что подтверждается текстом главы.
+
+
+
+\- Не считай предположение фактом.
+
+
+
+\- Если информация неоднозначна — ставь safety = "UNCERTAIN".
+
+
+
+\- Если информация потенциально противоречит существующему
+
+
+
+  Canon — ставь safety = "CONFLICT".
+
+
+
+\- Если информация явно подтверждается текстом и не выглядит
+
+
+
+  противоречивой — safety = "SAFE".
+
+
+
+\- Не изменяй Canon.
+
+
+
+\- Не удаляй существующие факты.
+
+
+
+\- Не создавай новые сущности без основания в тексте.
+
+
+
+\- Не включай обычные мелкие детали, которые не будут полезны
+
+
+
+  для будущих глав.
+
+
+
+\- Выделяй только информацию, которая может быть важна
+
+
+
+  для продолжения истории.
+
+
+
+
+
+
+
+ОСОБОЕ ПРАВИЛО ДЛЯ CHARACTER_CHANGE:
+
+
+
+
+
+
+
+Если в главе изменилось состояние персонажа, который уже есть
+
+
+
+в CANON-ПЕРСОНАЖАХ, обязательно создай update с:
+
+
+
+
+
+
+
+type = "CHARACTER_CHANGE"
+
+
+
+
+
+
+
+characterName = точное имя существующего персонажа
+
+
+
+
+
+
+
+attribute = короткое стабильное имя состояния.
+
+
+
+
+
+
+
+Используй такие атрибуты, когда они подходят:
+
+
+
+knowledge
+
+
+
+goal
+
+
+
+belief
+
+
+
+worldview
+
+
+
+personality
+
+
+
+discipline
+
+
+
+leadership
+
+
+
+power
+
+
+
+reputation
+
+
+
+influence
+
+
+
+alive
+
+
+
+location
+
+
+
+possessions
+
+
+
+ability
+
+
+
+relationship_status
+
+
+
+emotional_state
+
+
+
+trust
+
+
+
+suspicion
+
+
+
+other
+
+
+
+
+
+
+
+oldValue = состояние до этой главы, если его можно
+
+
+
+надёжно определить из контекста.
+
+
+
+
+
+
+
+newValue = новое состояние после этой главы.
+
+
+
+
+
+
+
+Если точное oldValue определить нельзя, оставь его пустым
+
+
+
+и не выдумывай.
+
+
+
+
+
+
+
+newValue обязательно должно быть основано на тексте главы.
+
+
+
+
+
+
+
+content должен понятным человеческим языком объяснять изменение.
+
+
+
+
+
+
+
+Пример:
+
+
+
+
+
+
+
+{
+
+
+
+  "type": "CHARACTER_CHANGE",
+
+
+
+  "title": "Каэль стал осторожнее",
+
+
+
+  "content": "После наблюдения за третьим звонком Каэль понимает, что его поведение могут отслеживать, поэтому начинает действовать более скрытно.",
+
+
+
+  "characterName": "Каэль",
+
+
+
+  "attribute": "suspicion",
+
+
+
+  "oldValue": "Не подозревал, что за ним наблюдают.",
+
+
+
+  "newValue": "Подозревает, что его поведение уже привлекло внимание.",
+
+
+
+  "safety": "SAFE",
+
+
+
+  "confidence": 0.92,
+
+
+
+  "reason": "Это прямо следует из финальной части главы."
+
+
+
+}
+
+
+
+
+
+
+
+ВАЖНО:
+
+
+
+
+
+
+
+Не создавай CHARACTER_CHANGE для персонажа,
+
+
+
+которого нет в CANON-персонажах.
+
+
+
+
+
+
+
+Если появляется совершенно новый персонаж,
+
+
+
+используй NEW_ENTITY и опиши его в content.
+
+
+
+
+
+
 
 Также создай:
 
+
+
+
+
+
+
 shortSummary:
+
+
+
 2–3 предложения о том, что произошло в главе.
 
+
+
+
+
+
+
 fullSummary:
+
+
+
 более подробное резюме событий главы.
 
+
+
+
+
+
+
 worldDelta:
+
+
+
 структурированный список важных изменений состояния мира.
+
+
+
+
+
+
 
 Для каждого найденного изменения укажи:
 
+
+
+
+
+
+
 type
+
+
+
 title
+
+
+
 content
+
+
+
 safety
+
+
+
 confidence
+
+
+
 reason
+
+
+
+
+
+
+
+Для CHARACTER_CHANGE дополнительно:
+
+
+
+
+
+
+
+characterName
+
+
+
+attribute
+
+
+
+oldValue
+
+
+
+newValue
+
+
+
+
+
+
+
+ОСОБОЕ ПРАВИЛО ДЛЯ RELATIONSHIP_CHANGE:
+
+
+
+ПРИОРИТЕТ КЛАССИФИКАЦИИ: если изменение относится к отношению одного CANON-персонажа к другому CANON-персонажу, используй RELATIONSHIP_CHANGE, а НЕ CHARACTER_CHANGE.
+
+
+
+Например, фраза «Каэль стал меньше доверять Марку» означает изменение отношения Каэля к Марку и должна быть RELATIONSHIP_CHANGE с sourceCharacterName = «Каэль», targetCharacterName = «Марк», relationType = «trust». Не записывай это только как CHARACTER_CHANGE с attribute = «trust».
+
+
+
+Если в главе изменилось отношение между двумя уже существующими
+
+
+
+CANON-персонажами, обязательно создай update с:
+
+
+
+
+
+
+
+type = "RELATIONSHIP_CHANGE"
+
+
+
+
+
+
+
+sourceCharacterName = точное имя персонажа, чьё отношение изменилось
+
+
+
+
+
+
+
+targetCharacterName = точное имя второго персонажа
+
+
+
+
+
+
+
+relationType = короткий стабильный тип отношения.
+
+
+
+Используй, когда подходит:
+
+
+
+trust
+
+
+
+rivalry
+
+
+
+family
+
+
+
+friendship
+
+
+
+debt
+
+
+
+respect
+
+
+
+fear
+
+
+
+hostility
+
+
+
+alliance
+
+
+
+other
+
+
+
+
+
+
+
+oldValue = состояние отношения до этой главы, если его можно
+
+
+
+надёжно определить.
+
+
+
+
+
+
+
+newValue = состояние отношения после этой главы.
+
+
+
+
+
+
+
+Не выдумывай числовую оценку отношения.
+
+
+
+relationType должен быть кратким и пригодным для хранения в Canon.
+
+
+
+
+
+
+
+Пример:
+
+
+
+
+
+
+
+{
+
+
+
+  "type": "RELATIONSHIP_CHANGE",
+
+
+
+  "title": "Доверие между Каэлем и Марком ослабло",
+
+
+
+  "content": "Каэль больше не воспринимает Марка как надёжного союзника и решает проверять его слова самостоятельно.",
+
+
+
+  "sourceCharacterName": "Каэль",
+
+
+
+  "targetCharacterName": "Марк",
+
+
+
+  "relationType": "trust",
+
+
+
+  "oldValue": "Ограниченное рабочее доверие.",
+
+
+
+  "newValue": "Доверие ослабло; Каэль проверяет слова Марка самостоятельно.",
+
+
+
+  "safety": "SAFE",
+
+
+
+  "confidence": 0.96,
+
+
+
+  "reason": "Изменение прямо выражено в действиях и выводах Каэля в конце главы."
+
+
+
+}
+
+
+
+
+
+
+
+ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА ПЕРЕД ФОРМИРОВАНИЕМ JSON:
+
+
+
+1. Если изменение описывает доверие, страх, враждебность, уважение, союз, соперничество, дружбу или другое отношение МЕЖДУ двумя CANON-персонажами — это RELATIONSHIP_CHANGE.
+
+
+
+2. Если изменение относится только к внутреннему состоянию одного персонажа и не направлено на другого персонажа — это CHARACTER_CHANGE.
+
+
+
+3. Если персонаж неизвестен, безымянен или представлен только общей ролью/описанием, не создавай для него characterProposal.
+
+
+
+4. Перед созданием characterProposal проверь, что персонаж действительно идентифицирован как отдельная личность и его существование важно для будущих глав.
+
+
+
+Для RELATIONSHIP_CHANGE sourceCharacterName должен быть именно тем
+
+
+
+персонажем, чьё отношение меняется. Не путай его с targetCharacterName.
+
+
+
+
+
+
+
+Для остальных типов изменений поля sourceCharacterName,
+
+
+
+targetCharacterName и relationType оставляй пустыми.
+
+
+
+
+
+
+
 `,
-          },
-          {
-            role: "user",
-            content: `
+
+
+
+          },
+
+
+
+
+
+
+
+          {
+
+
+
+            role: "user",
+
+
+
+            content: `
+
+
+
 PROJECT:
+
+
+
 ${project.name}
 
+
+
+
+
+
+
 BOOK:
+
+
+
 ${chapter.book.title}
 
+
+
+
+
+
+
 CHAPTER:
-${chapter.number}. ${chapter.title || "Без названия"}
+
+
+
+${chapter.number}. ${
+
+
+
+              chapter.title ||
+
+
+
+              "Без названия"
+
+
+
+            }
+
+
+
+
+
+
 
 CHAPTER PURPOSE:
+
+
+
 ${chapter.purpose || "Не указан"}
 
+
+
+
+
+
+
+CANON CHARACTERS:
+
+
+
+${charactersContext}
+
+
+
+
+
+
+
 APPROVED CHAPTER TEXT:
+
+
+
 ${chapterText}
+
+
+
 `,
-          },
-        ],
 
-        text: {
-          format: {
-            type: "json_schema",
-            name: "memory_extraction",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                shortSummary: {
-                  type: "string",
-                },
 
-                fullSummary: {
-                  type: "string",
-                },
 
-                worldDelta: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    changes: {
-                      type: "array",
-                      items: {
-                        type: "string",
-                      },
-                    },
-                  },
-                  required: ["changes"],
-                },
+          },
 
-                updates: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: [
-                          "FACT",
-                          "CHARACTER_CHANGE",
-                          "RELATIONSHIP_CHANGE",
-                          "WORLD_CHANGE",
-                          "EVENT",
-                          "PLOT_PROGRESS",
-                          "SECRET",
-                          "FORESHADOWING",
-                          "QUESTION",
-                          "NEW_ENTITY",
-                        ],
-                      },
 
-                      title: {
-                        type: "string",
-                      },
 
-                      content: {
-                        type: "string",
-                      },
+        ],
 
-                      safety: {
-                        type: "string",
-                        enum: [
-                          "SAFE",
-                          "UNCERTAIN",
-                          "CONFLICT",
-                        ],
-                      },
 
-                      confidence: {
-                        type: "number",
-                      },
 
-                      reason: {
-                        type: "string",
-                      },
-                    },
 
-                    required: [
-                      "type",
-                      "title",
-                      "content",
-                      "safety",
-                      "confidence",
-                      "reason",
-                    ],
-                  },
-                },
-              },
 
-              required: [
-                "shortSummary",
-                "fullSummary",
-                "worldDelta",
-                "updates",
-              ],
-            },
-          },
-        },
-      });
 
-    const outputText =
-      response.output_text?.trim();
 
-    if (!outputText) {
-      return NextResponse.json(
-        {
-          error:
-            "AI не вернул результат Memory Extraction.",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
+        text: {
 
-    const result = JSON.parse(outputText);
 
-    // =====================================================
-    // 8. ОПРЕДЕЛЯЕМ ОБЩУЮ БЕЗОПАСНОСТЬ
-    // =====================================================
 
-    const updates = Array.isArray(
-      result.updates
-    )
-      ? result.updates
-      : [];
+          format: {
 
-    let safety = "SAFE";
 
-    if (
-      updates.some(
-        (item: any) =>
-          item.safety === "CONFLICT"
-      )
-    ) {
-      safety = "CONFLICT";
-    } else if (
-      updates.some(
-        (item: any) =>
-          item.safety === "UNCERTAIN"
-      )
-    ) {
-      safety = "UNCERTAIN";
-    }
 
-    const safeCount =
-      updates.filter(
-        (item: any) =>
-          item.safety === "SAFE"
-      ).length;
+            type: "json_schema",
 
-    const uncertainCount =
-      updates.filter(
-        (item: any) =>
-          item.safety === "UNCERTAIN"
-      ).length;
 
-    const conflictCount =
-      updates.filter(
-        (item: any) =>
-          item.safety === "CONFLICT"
-      ).length;
 
-    // =====================================================
-    // 9. AI RUN
-    // =====================================================
+            name: "memory_extraction",
 
-    const aiRun =
-      await prisma.aiRun.create({
-        data: {
-          userId: session.user.id,
-          projectId: projectId,
-          roleKey: "MEMORY_EXTRACTION",
-          model: "gpt-5.6-luna",
-          status: "SUCCESS",
-          requestPayload: toInputJson({
-            chapterId,
-            chapterNumber:
-              chapter.number,
-          }),
-          responsePayload:
-            toInputJson(result),
-          durationMs:
-            Date.now() - startedAt,
-        },
-      });
 
-    // =====================================================
-    // 10. СОЗДАЁМ PROPOSAL
-    //
-    // AI НЕ ПИШЕТ MEMORY НАПРЯМУЮ.
-    // Сначала Proposal.
-    // =====================================================
 
-    const proposal =
-      await prisma.proposal.create({
-        data: {
-          projectId: projectId,
+            strict: true,
 
-          entityType:
-            "memory_update",
 
-          entityId: chapter.id,
 
-          op: "CREATE",
 
-          payload: toInputJson({
-            chapterId: chapter.id,
-            chapterNumber:
-              chapter.number,
 
-            shortSummary:
-              result.shortSummary,
 
-            fullSummary:
-              result.fullSummary,
 
-            worldDelta:
-              result.worldDelta,
+            schema: {
 
-            updates,
 
-            counts: {
-              total: updates.length,
-              safe: safeCount,
-              uncertain:
-                uncertainCount,
-              conflicts:
-                conflictCount,
-            },
-          }),
 
-          reason:
-            "Извлечение памяти после утверждения главы.",
+              type: "object",
 
-          confidence:
-            updates.length > 0
-              ? updates.reduce(
-                  (
-                    sum: number,
-                    item: any
-                  ) =>
-                    sum +
-                    Number(
-                      item.confidence ||
-                        0
-                    ),
-                  0
-                ) /
-                updates.length
-              : 1,
 
-          safety,
 
-          aiRunId: aiRun.id,
+              additionalProperties: false,
 
-          sourceChapterId:
-            chapter.id,
-        },
-      });
 
-    // =====================================================
-    // 11. ОТВЕТ
-    // =====================================================
 
-    return NextResponse.json({
-      ok: true,
 
-      proposal: {
-        id: proposal.id,
-        status: proposal.status,
-        safety: proposal.safety,
-      },
 
-      summary: {
-        shortSummary:
-          result.shortSummary,
 
-        total: updates.length,
 
-        safe: safeCount,
+              properties: {
 
-        uncertain:
-          uncertainCount,
 
-        conflicts:
-          conflictCount,
-      },
 
-      updates,
-    });
-  } catch (error) {
-    console.error(
-      "Memory extraction error:",
-      error
-    );
+                shortSummary: {
 
-    return NextResponse.json(
-      {
-        error:
-          "Не удалось выполнить Memory Update.",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
+
+
+                  type: "string",
+
+
+
+                },
+
+
+
+
+
+
+
+                fullSummary: {
+
+
+
+                  type: "string",
+
+
+
+                },
+
+
+
+
+
+
+
+                worldDelta: {
+
+
+
+                  type: "object",
+
+
+
+                  additionalProperties: false,
+
+
+
+
+
+
+
+                  properties: {
+
+
+
+                    changes: {
+
+
+
+                      type: "array",
+
+
+
+                      items: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+                    },
+
+
+
+                  },
+
+
+
+
+
+
+
+                  required: [
+
+
+
+                    "changes",
+
+
+
+                  ],
+
+
+
+                },
+
+
+
+
+
+
+
+                updates: {
+
+
+
+                  type: "array",
+
+
+
+
+
+
+
+                  items: {
+
+
+
+                    type: "object",
+
+
+
+                    additionalProperties: false,
+
+
+
+
+
+
+
+                    properties: {
+
+
+
+                      type: {
+
+
+
+                        type: "string",
+
+
+
+                        enum: [
+
+
+
+                          "FACT",
+
+
+
+                          "CHARACTER_CHANGE",
+
+
+
+                          "RELATIONSHIP_CHANGE",
+
+
+
+                          "WORLD_CHANGE",
+
+
+
+                          "EVENT",
+
+
+
+                          "PLOT_PROGRESS",
+
+
+
+                          "SECRET",
+
+
+
+                          "FORESHADOWING",
+
+
+
+                          "QUESTION",
+
+
+
+                          "NEW_ENTITY",
+
+
+
+                        ],
+
+
+
+                      },
+
+
+
+
+
+
+
+                      title: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      content: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      safety: {
+
+
+
+                        type: "string",
+
+
+
+                        enum: [
+
+
+
+                          "SAFE",
+
+
+
+                          "UNCERTAIN",
+
+
+
+                          "CONFLICT",
+
+
+
+                        ],
+
+
+
+                      },
+
+
+
+
+
+
+
+                      confidence: {
+
+
+
+                        type: "number",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      reason: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      characterName: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      attribute: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      oldValue: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+
+
+
+
+                      newValue: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+                      sourceCharacterName: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+                      targetCharacterName: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+                      relationType: {
+
+
+
+                        type: "string",
+
+
+
+                      },
+
+
+
+                    },
+
+
+
+
+
+
+
+                    required: [
+
+
+
+                      "type",
+
+
+
+                      "title",
+
+
+
+                      "content",
+
+
+
+                      "safety",
+
+
+
+                      "confidence",
+
+
+
+                      "reason",
+
+
+
+                      "characterName",
+
+
+
+                      "attribute",
+
+
+
+                      "oldValue",
+
+
+
+                      "newValue",
+
+
+
+                      "sourceCharacterName",
+
+
+
+                      "targetCharacterName",
+
+
+
+                      "relationType",
+
+
+
+                    ],
+
+
+
+                  },
+
+
+
+                },
+
+
+
+              characterProposals: {
+
+                type: "array",
+
+                items: {
+
+                  type: "object",
+
+                  additionalProperties: false,
+
+                  properties: {
+
+                    name: { type: "string" },
+
+                    role: { type: "string" },
+
+                    description: { type: "string" },
+
+                    appearance: { type: "string" },
+
+                    history: { type: "string" },
+
+                    personality: { type: "string" },
+
+                    goals: { type: "string" },
+
+                    fears: { type: "string" },
+
+                    beliefs: { type: "string" },
+
+                    values: { type: "string" },
+
+                    abilities: {
+
+                      type: "object",
+
+                      additionalProperties: false,
+
+                      properties: {
+
+                        items: {
+
+                          type: "array",
+
+                          items: { type: "string" },
+
+                        },
+
+                      },
+
+                      required: ["items"],
+
+                    },
+
+                    safety: {
+
+                      type: "string",
+
+                      enum: ["SAFE", "UNCERTAIN", "CONFLICT"],
+
+                    },
+
+                    confidence: { type: "number" },
+
+                    reason: { type: "string" },
+
+                  },
+
+                  required: [
+
+                    "name", "role", "description", "appearance", "history",
+
+                    "personality", "goals", "fears", "beliefs", "values",
+
+                    "abilities", "safety", "confidence", "reason",
+
+                  ],
+
+                },
+
+              },
+
+
+
+              },
+
+
+
+
+
+
+
+              required: [
+
+
+
+                "shortSummary",
+
+
+
+                "fullSummary",
+
+
+
+                "worldDelta",
+
+
+
+                "updates",
+
+
+
+                "characterProposals",
+
+
+
+              ],
+
+
+
+            },
+
+
+
+          },
+
+
+
+        },
+
+
+
+      });
+
+
+
+
+
+
+
+    const outputText =
+
+
+
+      response.output_text?.trim();
+
+
+
+
+
+
+
+    if (!outputText) {
+
+
+
+      return NextResponse.json(
+
+
+
+        {
+
+
+
+          error:
+
+
+
+            "AI не вернул результат Memory Extraction.",
+
+
+
+        },
+
+
+
+        {
+
+
+
+          status: 500,
+
+
+
+        }
+
+
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    const result =
+
+
+
+      JSON.parse(outputText);
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 9. НОРМАЛИЗАЦИЯ
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const updates = Array.isArray(
+
+
+
+      result.updates
+
+
+
+    )
+
+
+
+      ? result.updates
+
+
+
+      : [];
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 10. ОБЩАЯ БЕЗОПАСНОСТЬ
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    let safety = "SAFE";
+
+
+
+
+
+
+
+    if (
+
+
+
+      updates.some(
+
+
+
+        (item: any) =>
+
+
+
+          item.safety === "CONFLICT"
+
+
+
+      )
+
+
+
+    ) {
+
+
+
+      safety = "CONFLICT";
+
+
+
+    } else if (
+
+
+
+      updates.some(
+
+
+
+        (item: any) =>
+
+
+
+          item.safety === "UNCERTAIN"
+
+
+
+      )
+
+
+
+    ) {
+
+
+
+      safety = "UNCERTAIN";
+
+
+
+    }
+
+
+
+
+
+
+
+    const safeCount =
+
+
+
+      updates.filter(
+
+
+
+        (item: any) =>
+
+
+
+          item.safety === "SAFE"
+
+
+
+      ).length;
+
+
+
+
+
+
+
+    const uncertainCount =
+
+
+
+      updates.filter(
+
+
+
+        (item: any) =>
+
+
+
+          item.safety === "UNCERTAIN"
+
+
+
+      ).length;
+
+
+
+
+
+
+
+    const conflictCount =
+
+
+
+      updates.filter(
+
+
+
+        (item: any) =>
+
+
+
+          item.safety === "CONFLICT"
+
+
+
+      ).length;
+
+
+
+
+
+
+
+    const characterChanges =
+
+
+
+      updates.filter(
+
+
+
+        (item: any) =>
+
+
+
+          item.type ===
+
+
+
+          "CHARACTER_CHANGE" &&
+
+
+
+          typeof item.characterName ===
+
+
+
+            "string" &&
+
+
+
+          item.characterName.trim() &&
+
+
+
+          typeof item.attribute ===
+
+
+
+            "string" &&
+
+
+
+          item.attribute.trim() &&
+
+
+
+          typeof item.newValue ===
+
+
+
+            "string" &&
+
+
+
+          item.newValue.trim()
+
+
+
+      );
+
+
+
+
+
+
+
+
+
+
+
+    const relationshipChanges =
+
+
+
+      updates.filter(
+
+
+
+        (item: any) =>
+
+
+
+          item.type ===
+
+
+
+          "RELATIONSHIP_CHANGE" &&
+
+
+
+          typeof item.sourceCharacterName ===
+
+
+
+            "string" &&
+
+
+
+          item.sourceCharacterName.trim() &&
+
+
+
+          typeof item.targetCharacterName ===
+
+
+
+            "string" &&
+
+
+
+          item.targetCharacterName.trim() &&
+
+
+
+          typeof item.relationType ===
+
+
+
+            "string" &&
+
+
+
+          item.relationType.trim()
+
+
+
+      );
+
+    // =====================================================
+
+
+
+    const characterProposals =
+
+      Array.isArray(result.characterProposals)
+
+        ? result.characterProposals
+
+            .filter(
+
+              (item: any) =>
+
+                item &&
+
+                typeof item === "object" &&
+
+                typeof item.name === "string" &&
+
+                item.name.trim()
+
+            )
+
+            .map((item: any) => ({
+
+              name: item.name.trim(),
+
+              role: typeof item.role === "string" ? item.role.trim() : "",
+
+              description: typeof item.description === "string" ? item.description.trim() : "",
+
+              appearance: typeof item.appearance === "string" ? item.appearance.trim() : "",
+
+              history: typeof item.history === "string" ? item.history.trim() : "",
+
+              personality: typeof item.personality === "string" ? item.personality.trim() : "",
+
+              goals: typeof item.goals === "string" ? item.goals.trim() : "",
+
+              fears: typeof item.fears === "string" ? item.fears.trim() : "",
+
+              beliefs: typeof item.beliefs === "string" ? item.beliefs.trim() : "",
+
+              values: typeof item.values === "string" ? item.values.trim() : "",
+
+              abilities:
+
+                item.abilities &&
+
+                typeof item.abilities === "object" &&
+
+                Array.isArray(item.abilities.items)
+
+                  ? {
+
+                      items: item.abilities.items.filter(
+
+                        (value: any) =>
+
+                          typeof value === "string" && value.trim()
+
+                      ),
+
+                    }
+
+                  : { items: [] },
+
+              safety:
+
+                item.safety === "SAFE" ||
+
+                item.safety === "UNCERTAIN" ||
+
+                item.safety === "CONFLICT"
+
+                  ? item.safety
+
+                  : "UNCERTAIN",
+
+              confidence:
+
+                typeof item.confidence === "number" &&
+
+                Number.isFinite(item.confidence)
+
+                  ? item.confidence
+
+                  : 0,
+
+              reason:
+
+                typeof item.reason === "string"
+
+                  ? item.reason
+
+                  : "Новый персонаж обнаружен в утверждённой главе.",
+
+            }))
+
+        : [];
+
+
+
+
+
+    // 11. AI RUN
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const aiRun =
+
+
+
+      await prisma.aiRun.create({
+
+
+
+        data: {
+
+
+
+          userId:
+
+
+
+            session.user.id,
+
+
+
+
+
+
+
+          projectId,
+
+
+
+
+
+
+
+          roleKey:
+
+
+
+            "MEMORY_EXTRACTION",
+
+
+
+
+
+
+
+          model:
+
+
+
+            "gpt-5.6-luna",
+
+
+
+
+
+
+
+          status:
+
+
+
+            "SUCCESS",
+
+
+
+
+
+
+
+          requestPayload:
+
+
+
+            toInputJson({
+
+
+
+              chapterId,
+
+
+
+              chapterNumber:
+
+
+
+                chapter.number,
+
+
+
+              canonCharacterIds:
+
+
+
+                characters.map(
+
+
+
+                  (character) =>
+
+
+
+                    character.id
+
+
+
+                ),
+
+
+
+            }),
+
+
+
+
+
+
+
+          responsePayload:
+
+
+
+            toInputJson(result),
+
+
+
+
+
+
+
+          durationMs:
+
+
+
+            Date.now() -
+
+
+
+            startedAt,
+
+
+
+        },
+
+
+
+      });
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 12. СОЗДАЁМ MEMORY PROPOSAL
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    const proposal =
+
+
+
+      await prisma.proposal.create({
+
+
+
+        data: {
+
+
+
+          projectId,
+
+
+
+
+
+
+
+          entityType:
+
+
+
+            "memory_update",
+
+
+
+
+
+
+
+          entityId:
+
+
+
+            chapter.id,
+
+
+
+
+
+
+
+          op:
+
+
+
+            "CREATE",
+
+
+
+
+
+
+
+          payload:
+
+
+
+            toInputJson({
+
+
+
+              chapterId:
+
+
+
+                chapter.id,
+
+
+
+
+
+
+
+              chapterNumber:
+
+
+
+                chapter.number,
+
+
+
+
+
+
+
+              shortSummary:
+
+
+
+                result.shortSummary,
+
+
+
+
+
+
+
+              fullSummary:
+
+
+
+                result.fullSummary,
+
+
+
+
+
+
+
+              worldDelta:
+
+
+
+                result.worldDelta,
+
+
+
+
+
+
+
+              updates,
+
+
+
+
+
+
+
+              characterProposals,
+
+
+
+
+
+
+
+              relationshipChanges,
+
+
+
+
+
+
+
+              counts: {
+
+
+
+                total:
+
+
+
+                  updates.length,
+
+
+
+
+
+
+
+                safe:
+
+
+
+                  safeCount,
+
+
+
+
+
+
+
+                uncertain:
+
+
+
+                  uncertainCount,
+
+
+
+
+
+
+
+                conflicts:
+
+
+
+                  conflictCount,
+
+
+
+
+
+
+
+                characterChanges:
+
+
+
+                  characterChanges.length,
+
+
+
+                relationshipChanges:
+
+
+
+                  relationshipChanges.length,
+
+
+
+                newCharacters:
+
+
+
+                  characterProposals.length,
+
+
+
+              },
+
+
+
+            }),
+
+
+
+
+
+
+
+          reason:
+
+
+
+            "Извлечение памяти после утверждения главы.",
+
+
+
+
+
+
+
+          confidence:
+
+
+
+            updates.length > 0
+
+
+
+              ? updates.reduce(
+
+
+
+                  (
+
+
+
+                    sum: number,
+
+
+
+                    item: any
+
+
+
+                  ) =>
+
+
+
+                    sum +
+
+
+
+                    Number(
+
+
+
+                      item.confidence ||
+
+
+
+                        0
+
+
+
+                    ),
+
+
+
+                  0
+
+
+
+                ) /
+
+
+
+                updates.length
+
+
+
+              : 1,
+
+
+
+
+
+
+
+          safety,
+
+
+
+
+
+
+
+          aiRunId:
+
+
+
+            aiRun.id,
+
+
+
+
+
+
+
+          sourceChapterId:
+
+
+
+            chapter.id,
+
+
+
+        },
+
+
+
+      });
+
+
+
+
+
+
+
+    // =====================================================
+
+
+
+    // 13. ОТВЕТ
+
+
+
+    // =====================================================
+
+
+
+
+
+
+
+    return NextResponse.json({
+
+
+
+      ok: true,
+
+
+
+
+
+
+
+      proposal: {
+
+
+
+        id:
+
+
+
+          proposal.id,
+
+
+
+
+
+
+
+        status:
+
+
+
+          proposal.status,
+
+
+
+
+
+
+
+        safety:
+
+
+
+          proposal.safety,
+
+
+
+
+
+
+
+        payload:
+
+
+
+          proposal.payload,
+
+
+
+      },
+
+
+
+
+
+
+
+      summary: {
+
+
+
+        shortSummary:
+
+
+
+          result.shortSummary,
+
+
+
+
+
+
+
+        total:
+
+
+
+          updates.length,
+
+
+
+
+
+
+
+        safe:
+
+
+
+          safeCount,
+
+
+
+
+
+
+
+        uncertain:
+
+
+
+          uncertainCount,
+
+
+
+
+
+
+
+        conflicts:
+
+
+
+          conflictCount,
+
+
+
+
+
+
+
+        characterChanges:
+
+
+
+          characterChanges.length,
+
+
+
+        relationshipChanges:
+
+
+
+          relationshipChanges.length,
+
+
+
+        newCharacters:
+
+
+
+          characterProposals.length,
+
+
+
+      },
+
+
+
+
+
+
+
+      updates,
+
+
+
+
+
+
+
+      characterProposals,
+
+
+
+
+
+
+
+      relationshipChanges,
+
+
+
+    });
+
+
+
+  } catch (error) {
+
+
+
+    console.error(
+
+
+
+      "Memory extraction error:",
+
+
+
+      error
+
+
+
+    );
+
+
+
+
+
+
+
+    return NextResponse.json(
+
+
+
+      {
+
+
+
+        error:
+
+
+
+          "Не удалось выполнить Memory Update.",
+
+
+
+      },
+
+
+
+      {
+
+
+
+        status: 500,
+
+
+
+      }
+
+
+
+    );
+
+
+
+  }
+
+
+
 }

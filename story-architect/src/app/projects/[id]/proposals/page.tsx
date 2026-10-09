@@ -15,6 +15,19 @@ type ChapterPlan = {
   openQuestions?: string[];
 };
 
+type Scene = {
+  order: number;
+  title: string;
+  purpose?: string;
+  plan?: string[];
+  plannedOutcome?: string;
+};
+
+type ScenePlan = {
+  scenes?: Scene[];
+  openQuestions?: string[];
+};
+
 type Proposal = {
   id: string;
   entityType: string;
@@ -45,6 +58,8 @@ type Proposal = {
     mustHappen?: string[];
     mustNotHappen?: string[];
     openQuestions?: string[];
+
+    scenes?: Scene[];
   };
 
   reason: string | null;
@@ -57,10 +72,17 @@ export default function ProposalsPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
 
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [proposals, setProposals] =
+    useState<Proposal[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [processingId, setProcessingId] =
+    useState<string | null>(null);
+
+  const [error, setError] =
+    useState("");
 
   async function loadProposals() {
     try {
@@ -75,11 +97,14 @@ export default function ProposalsPage() {
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Не удалось загрузить предложения"
+          data.error ||
+            "Не удалось загрузить предложения"
         );
       }
 
-      setProposals(data.proposals || []);
+      setProposals(
+        data.proposals || []
+      );
     } catch (error) {
       console.error(error);
 
@@ -112,17 +137,22 @@ export default function ProposalsPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-          body: JSON.stringify({ action }),
+          body: JSON.stringify({
+            action,
+          }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Не удалось обработать предложение"
+          data.error ||
+            "Не удалось обработать предложение"
         );
       }
 
@@ -140,16 +170,24 @@ export default function ProposalsPage() {
     }
   }
 
-  const pendingProposals = proposals.filter(
-    (proposal) => proposal.status === "PENDING"
-  );
+  const pendingProposals =
+    proposals.filter(
+      (proposal) =>
+        proposal.status ===
+        "PENDING"
+    );
 
   function renderList(
     title: string,
-    items: string[] | undefined,
+    items:
+      | string[]
+      | undefined,
     icon: string
   ) {
-    if (!items || items.length === 0) {
+    if (
+      !items ||
+      items.length === 0
+    ) {
       return null;
     }
 
@@ -174,26 +212,33 @@ export default function ProposalsPage() {
             gap: 8,
           }}
         >
-          {items.map((item, index) => (
-            <div
-              key={`${title}-${index}`}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 8,
-                background: "#f8f8f8",
-                lineHeight: 1.5,
-              }}
-            >
-              {item}
-            </div>
-          ))}
+          {items.map(
+            (item, index) => (
+              <div
+                key={`${title}-${index}`}
+                style={{
+                  padding:
+                    "10px 12px",
+                  borderRadius: 8,
+                  background:
+                    "#f8f8f8",
+                  lineHeight: 1.5,
+                }}
+              >
+                {item}
+              </div>
+            )
+          )}
         </div>
       </div>
     );
   }
 
-  function renderChapterPlan(proposal: Proposal) {
-    const plan: ChapterPlan = proposal.payload || {};
+  function renderChapterPlan(
+    proposal: Proposal
+  ) {
+    const plan: ChapterPlan =
+      proposal.payload || {};
 
     return (
       <div>
@@ -201,7 +246,8 @@ export default function ProposalsPage() {
           style={{
             padding: 18,
             borderRadius: 10,
-            background: "#f7f7f7",
+            background:
+              "#f7f7f7",
             marginBottom: 20,
           }}
         >
@@ -226,11 +272,14 @@ export default function ProposalsPage() {
 
           <p
             style={{
-              margin: "8px 0 0",
+              margin:
+                "8px 0 0",
               color: "#666",
             }}
           >
-            AI подготовил структуру главы на основе идеи автора.
+            AI подготовил структуру
+            главы на основе идеи
+            автора.
           </p>
         </div>
 
@@ -239,13 +288,15 @@ export default function ProposalsPage() {
             style={{
               padding: 18,
               borderRadius: 10,
-              background: "#eef6ff",
+              background:
+                "#eef6ff",
               marginBottom: 16,
             }}
           >
             <h3
               style={{
-                margin: "0 0 10px",
+                margin:
+                  "0 0 10px",
                 fontSize: 16,
               }}
             >
@@ -257,7 +308,9 @@ export default function ProposalsPage() {
                 lineHeight: 1.6,
               }}
             >
-              {plan.chapterPurpose}
+              {
+                plan.chapterPurpose
+              }
             </div>
           </div>
         )}
@@ -274,20 +327,27 @@ export default function ProposalsPage() {
             <div
               style={{
                 padding: 18,
-                border: "1px solid #e5e5e5",
+                border:
+                  "1px solid #e5e5e5",
                 borderRadius: 10,
               }}
             >
               <h3
                 style={{
-                  margin: "0 0 10px",
+                  margin:
+                    "0 0 10px",
                   fontSize: 16,
                 }}
               >
-                🌅 Начальное состояние
+                🌅 Начальное
+                состояние
               </h3>
 
-              <div style={{ lineHeight: 1.6 }}>
+              <div
+                style={{
+                  lineHeight: 1.6,
+                }}
+              >
                 {plan.initialState}
               </div>
             </div>
@@ -297,20 +357,27 @@ export default function ProposalsPage() {
             <div
               style={{
                 padding: 18,
-                border: "1px solid #e5e5e5",
+                border:
+                  "1px solid #e5e5e5",
                 borderRadius: 10,
               }}
             >
               <h3
                 style={{
-                  margin: "0 0 10px",
+                  margin:
+                    "0 0 10px",
                   fontSize: 16,
                 }}
               >
-                🏁 Конечное состояние
+                🏁 Конечное
+                состояние
               </h3>
 
-              <div style={{ lineHeight: 1.6 }}>
+              <div
+                style={{
+                  lineHeight: 1.6,
+                }}
+              >
                 {plan.endState}
               </div>
             </div>
@@ -350,17 +417,349 @@ export default function ProposalsPage() {
     );
   }
 
+  function renderScenePlan(
+    proposal: Proposal
+  ) {
+    const plan: ScenePlan =
+      proposal.payload || {};
+
+    const scenes =
+      Array.isArray(plan.scenes)
+        ? plan.scenes
+        : [];
+
+    const openQuestions =
+      Array.isArray(
+        plan.openQuestions
+      )
+        ? plan.openQuestions
+        : [];
+
+    return (
+      <div>
+        <div
+          style={{
+            padding: 18,
+            borderRadius: 10,
+            background:
+              "#faf8ff",
+            border:
+              "1px solid #ddd4f0",
+            marginBottom: 20,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              color: "#777",
+              marginBottom: 8,
+            }}
+          >
+            🎬 Предложение Scene
+            Planner
+          </div>
+
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 24,
+            }}
+          >
+            План сцен
+          </h2>
+
+          <p
+            style={{
+              margin:
+                "8px 0 0",
+              color: "#666",
+              lineHeight: 1.5,
+            }}
+          >
+            AI разбил утверждённый
+            план главы на
+            последовательность сцен.
+            План пока не является
+            Canon.
+          </p>
+        </div>
+
+        {scenes.length === 0 ? (
+          <div
+            style={{
+              padding: 18,
+              borderRadius: 10,
+              background:
+                "#fff7ed",
+              color: "#7c4a03",
+            }}
+          >
+            ⚠️ В Proposal не
+            найдено ни одной сцены.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection:
+                "column",
+              gap: 16,
+            }}
+          >
+            {scenes.map(
+              (
+                scene,
+                index
+              ) => {
+                const scenePlan =
+                  Array.isArray(
+                    scene.plan
+                  )
+                    ? scene.plan
+                    : [];
+
+                return (
+                  <article
+                    key={`${scene.order}-${index}`}
+                    style={{
+                      border:
+                        "1px solid #ddd",
+                      borderRadius: 12,
+                      padding: 20,
+                      background:
+                        "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        alignItems:
+                          "center",
+                        gap: 12,
+                        marginBottom:
+                          10,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color:
+                            "#777",
+                        }}
+                      >
+                        Сцена{" "}
+                        {
+                          scene.order
+                        }
+                      </div>
+
+                      <span
+                        style={{
+                          padding:
+                            "5px 9px",
+                          borderRadius:
+                            999,
+                          background:
+                            "#f1f5f9",
+                          color:
+                            "#555",
+                          fontSize: 11,
+                          fontWeight:
+                            600,
+                        }}
+                      >
+                        Предложение
+                      </span>
+                    </div>
+
+                    <h3
+                      style={{
+                        margin:
+                          "0 0 18px",
+                        fontSize: 20,
+                      }}
+                    >
+                      {
+                        scene.title
+                      }
+                    </h3>
+
+                    {scene.purpose && (
+                      <div
+                        style={{
+                          marginBottom:
+                            18,
+                        }}
+                      >
+                        <strong>
+                          🎯 Цель сцены
+                        </strong>
+
+                        <p
+                          style={{
+                            margin:
+                              "8px 0 0",
+                            color:
+                              "#555",
+                            lineHeight:
+                              1.6,
+                          }}
+                        >
+                          {
+                            scene.purpose
+                          }
+                        </p>
+                      </div>
+                    )}
+
+                    {scenePlan.length >
+                      0 && (
+                      <div
+                        style={{
+                          marginBottom:
+                            18,
+                        }}
+                      >
+                        <strong>
+                          📋 План действий
+                        </strong>
+
+                        <ol
+                          style={{
+                            marginTop:
+                              10,
+                            lineHeight:
+                              1.7,
+                          }}
+                        >
+                          {scenePlan.map(
+                            (
+                              item,
+                              itemIndex
+                            ) => (
+                              <li
+                                key={
+                                  itemIndex
+                                }
+                              >
+                                {
+                                  item
+                                }
+                              </li>
+                            )
+                          )}
+                        </ol>
+                      </div>
+                    )}
+
+                    {scene.plannedOutcome && (
+                      <div
+                        style={{
+                          padding: 14,
+                          borderRadius:
+                            8,
+                          background:
+                            "#f8fafc",
+                        }}
+                      >
+                        <strong>
+                          🏁 Ожидаемый
+                          результат
+                        </strong>
+
+                        <p
+                          style={{
+                            margin:
+                              "8px 0 0",
+                            color:
+                              "#555",
+                            lineHeight:
+                              1.6,
+                          }}
+                        >
+                          {
+                            scene.plannedOutcome
+                          }
+                        </p>
+                      </div>
+                    )}
+                  </article>
+                )
+              }
+            )}
+          </div>
+        )}
+
+        {openQuestions.length >
+          0 && (
+          <div
+            style={{
+              marginTop: 20,
+              padding: 18,
+              borderRadius: 10,
+              background:
+                "#fff7ed",
+              border:
+                "1px solid #fed7aa",
+            }}
+          >
+            <h3
+              style={{
+                margin:
+                  "0 0 10px",
+                fontSize: 16,
+              }}
+            >
+              ❓ Открытые вопросы
+            </h3>
+
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: 22,
+                lineHeight: 1.7,
+              }}
+            >
+              {openQuestions.map(
+                (
+                  question,
+                  index
+                ) => (
+                  <li
+                    key={index}
+                  >
+                    {question}
+                  </li>
+                )
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main
       style={{
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily:
+          "Arial, sans-serif",
       }}
     >
-      <div style={{ marginBottom: 30 }}>
-        <Link href={`/projects/${projectId}`}>
+      <div
+        style={{
+          marginBottom: 30,
+        }}
+      >
+        <Link
+          href={`/projects/${projectId}`}
+        >
           ← Назад в проект
         </Link>
       </div>
@@ -368,14 +767,19 @@ export default function ProposalsPage() {
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent:
+            "space-between",
           alignItems: "center",
           gap: 20,
           marginBottom: 30,
         }}
       >
         <div>
-          <h1 style={{ marginBottom: 8 }}>
+          <h1
+            style={{
+              marginBottom: 8,
+            }}
+          >
             Предложения AI
           </h1>
 
@@ -385,20 +789,28 @@ export default function ProposalsPage() {
               margin: 0,
             }}
           >
-            Здесь AI предлагает изменения в Story Bible.
-            Только автор решает, что становится Canon.
+            Здесь AI предлагает
+            изменения в Story
+            Bible. Только автор
+            решает, что становится
+            Canon.
           </p>
         </div>
 
         <div
           style={{
-            padding: "10px 16px",
+            padding:
+              "10px 16px",
             borderRadius: 20,
-            background: "#f3f4f6",
+            background:
+              "#f3f4f6",
             fontWeight: 600,
           }}
         >
-          {pendingProposals.length} ожидают решения
+          {
+            pendingProposals.length
+          }{" "}
+          ожидают решения
         </div>
       </div>
 
@@ -407,43 +819,65 @@ export default function ProposalsPage() {
           style={{
             marginBottom: 20,
             padding: 16,
-            border: "1px solid #cc0000",
+            border:
+              "1px solid #cc0000",
             borderRadius: 8,
-            background: "#fff5f5",
+            background:
+              "#fff5f5",
           }}
         >
-          <strong>Ошибка:</strong> {error}
+          <strong>
+            Ошибка:
+          </strong>{" "}
+          {error}
         </div>
       )}
 
       {loading ? (
-        <div>Загрузка предложений...</div>
-      ) : pendingProposals.length === 0 ? (
+        <div>
+          Загрузка
+          предложений...
+        </div>
+      ) : pendingProposals.length ===
+        0 ? (
         <section
           style={{
             padding: 40,
-            border: "1px solid #ddd",
+            border:
+              "1px solid #ddd",
             borderRadius: 12,
-            textAlign: "center",
+            textAlign:
+              "center",
           }}
         >
-          <h2>Пока нет предложений</h2>
+          <h2>
+            Пока нет предложений
+          </h2>
 
-          <p style={{ color: "#666" }}>
-            Запустите AI-анализ в Story Bible, чтобы получить
-            предложения.
+          <p
+            style={{
+              color: "#666",
+            }}
+          >
+            Запустите AI-анализ
+            в Story Bible, чтобы
+            получить предложения.
           </p>
 
           <Link
             href={`/projects/${projectId}/story-bible`}
             style={{
-              display: "inline-block",
+              display:
+                "inline-block",
               marginTop: 16,
-              padding: "12px 20px",
+              padding:
+                "12px 20px",
               borderRadius: 8,
-              background: "#111",
+              background:
+                "#111",
               color: "#fff",
-              textDecoration: "none",
+              textDecoration:
+                "none",
             }}
           >
             Открыть Story Bible
@@ -456,201 +890,287 @@ export default function ProposalsPage() {
             gap: 20,
           }}
         >
-          {pendingProposals.map((proposal) => {
-            const data = proposal.payload?.data || {};
-            const isChapterPlan =
-              proposal.entityType === "chapter_plan";
+          {pendingProposals.map(
+            (proposal) => {
+              const data =
+                proposal.payload
+                  ?.data || {};
 
-            const isProcessing =
-              processingId === proposal.id;
+              const isChapterPlan =
+                proposal.entityType ===
+                "chapter_plan";
 
-            return (
-              <section
-                key={proposal.id}
-                style={{
-                  border: "1px solid #ddd",
-                  borderRadius: 14,
-                  padding: 24,
-                  background: "#fff",
-                }}
-              >
-                {isChapterPlan ? (
-                  renderChapterPlan(proposal)
-                ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      gap: 20,
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          color: "#666",
-                          marginBottom: 8,
-                        }}
-                      >
-                        AI Proposal · {proposal.entityType}
-                      </div>
+              const isScenePlan =
+                proposal.entityType ===
+                "scene_plan";
 
-                      <h2
-                        style={{
-                          margin: "0 0 12px",
-                        }}
-                      >
-                        {data.name || "Без названия"}
-                      </h2>
+              const isProcessing =
+                processingId ===
+                proposal.id;
 
-                      {data.description && (
-                        <p
-                          style={{
-                            lineHeight: 1.6,
-                            marginTop: 0,
-                          }}
-                        >
-                          {data.description}
-                        </p>
-                      )}
-
-                      {data.role && (
-                        <p>
-                          <strong>Роль:</strong> {data.role}
-                        </p>
-                      )}
-
-                      {data.appearance && (
-                        <p>
-                          <strong>Внешность:</strong>{" "}
-                          {data.appearance}
-                        </p>
-                      )}
-
-                      {data.personality && (
-                        <p>
-                          <strong>Характер:</strong>{" "}
-                          {data.personality}
-                        </p>
-                      )}
-
-                      {data.goals && (
-                        <p>
-                          <strong>Цели:</strong> {data.goals}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {proposal.reason && (
-                  <div
-                    style={{
-                      marginTop: 24,
-                      padding: 14,
-                      borderRadius: 8,
-                      background: "#f7f7f7",
-                      fontSize: 14,
-                    }}
-                  >
-                    <strong>
-                      Почему AI это предлагает:
-                    </strong>
-
-                    <br />
-
-                    {proposal.reason}
-                  </div>
-                )}
-
-                <div
+              return (
+                <section
+                  key={proposal.id}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                    marginTop: 24,
-                    paddingTop: 20,
-                    borderTop: "1px solid #eee",
+                    border:
+                      "1px solid #ddd",
+                    borderRadius: 14,
+                    padding: 24,
+                    background:
+                      "#fff",
                   }}
                 >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "6px 10px",
-                      borderRadius: 20,
-                      background: "#fff4cc",
-                      fontSize: 13,
-                      fontWeight: 600,
-                    }}
-                  >
-                    PENDING
-                  </span>
+                  {isScenePlan ? (
+                    renderScenePlan(
+                      proposal
+                    )
+                  ) : isChapterPlan ? (
+                    renderChapterPlan(
+                      proposal
+                    )
+                  ) : (
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        alignItems:
+                          "flex-start",
+                        gap: 20,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color:
+                              "#666",
+                            marginBottom:
+                              8,
+                          }}
+                        >
+                          AI Proposal ·{" "}
+                          {
+                            proposal.entityType
+                          }
+                        </div>
+
+                        <h2
+                          style={{
+                            margin:
+                              "0 0 12px",
+                          }}
+                        >
+                          {data.name ||
+                            "Без названия"}
+                        </h2>
+
+                        {data.description && (
+                          <p
+                            style={{
+                              lineHeight:
+                                1.6,
+                              marginTop:
+                                0,
+                            }}
+                          >
+                            {
+                              data.description
+                            }
+                          </p>
+                        )}
+
+                        {data.role && (
+                          <p>
+                            <strong>
+                              Роль:
+                            </strong>{" "}
+                            {
+                              data.role
+                            }
+                          </p>
+                        )}
+
+                        {data.appearance && (
+                          <p>
+                            <strong>
+                              Внешность:
+                            </strong>{" "}
+                            {
+                              data.appearance
+                            }
+                          </p>
+                        )}
+
+                        {data.personality && (
+                          <p>
+                            <strong>
+                              Характер:
+                            </strong>{" "}
+                            {
+                              data.personality
+                            }
+                          </p>
+                        )}
+
+                        {data.goals && (
+                          <p>
+                            <strong>
+                              Цели:
+                            </strong>{" "}
+                            {
+                              data.goals
+                            }
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {proposal.reason && (
+                    <div
+                      style={{
+                        marginTop: 24,
+                        padding: 14,
+                        borderRadius: 8,
+                        background:
+                          "#f7f7f7",
+                        fontSize: 14,
+                      }}
+                    >
+                      <strong>
+                        Почему AI это
+                        предлагает:
+                      </strong>
+
+                      <br />
+
+                      {
+                        proposal.reason
+                      }
+                    </div>
+                  )}
 
                   <div
                     style={{
-                      display: "flex",
+                      display:
+                        "flex",
+                      justifyContent:
+                        "space-between",
+                      alignItems:
+                        "center",
                       gap: 12,
+                      marginTop: 24,
+                      paddingTop: 20,
+                      borderTop:
+                        "1px solid #eee",
                     }}
                   >
-                    <button
-                      type="button"
-                      disabled={isProcessing}
-                      onClick={() =>
-                        handleAction(
-                          proposal.id,
-                          "ACCEPT"
-                        )
-                      }
+                    <span
                       style={{
-                        padding: "11px 20px",
-                        borderRadius: 8,
-                        border: "none",
-                        background: "#111",
-                        color: "#fff",
-                        cursor: isProcessing
-                          ? "default"
-                          : "pointer",
-                        opacity: isProcessing ? 0.6 : 1,
+                        display:
+                          "inline-block",
+                        padding:
+                          "6px 10px",
+                        borderRadius:
+                          20,
+                        background:
+                          "#fff4cc",
+                        fontSize: 13,
+                        fontWeight:
+                          600,
                       }}
                     >
-                      {isProcessing
-  ? "Обработка..."
-  : proposal.entityType === "scene_plan"
-    ? "✓ Утвердить план сцен"
-    : isChapterPlan
-      ? "✓ Утвердить план главы"
-      : "✓ Принять в Canon"}
-                    </button>
+                      PENDING
+                    </span>
 
-                    <button
-                      type="button"
-                      disabled={isProcessing}
-                      onClick={() =>
-                        handleAction(
-                          proposal.id,
-                          "REJECT"
-                        )
-                      }
+                    <div
                       style={{
-                        padding: "11px 20px",
-                        borderRadius: 8,
-                        border: "1px solid #ccc",
-                        background: "#fff",
-                        cursor: isProcessing
-                          ? "default"
-                          : "pointer",
-                        opacity: isProcessing ? 0.6 : 1,
+                        display:
+                          "flex",
+                        gap: 12,
                       }}
                     >
-                      ✕ Отклонить
-                    </button>
+                      <button
+                        type="button"
+                        disabled={
+                          isProcessing
+                        }
+                        onClick={() =>
+                          handleAction(
+                            proposal.id,
+                            "ACCEPT"
+                          )
+                        }
+                        style={{
+                          padding:
+                            "11px 20px",
+                          borderRadius:
+                            8,
+                          border:
+                            "none",
+                          background:
+                            "#111",
+                          color:
+                            "#fff",
+                          cursor:
+                            isProcessing
+                              ? "default"
+                              : "pointer",
+                          opacity:
+                            isProcessing
+                              ? 0.6
+                              : 1,
+                        }}
+                      >
+                        {isProcessing
+                          ? "Обработка..."
+                          : isScenePlan
+                          ? "✓ Утвердить план сцен"
+                          : isChapterPlan
+                          ? "✓ Утвердить план главы"
+                          : "✓ Принять в Canon"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          isProcessing
+                        }
+                        onClick={() =>
+                          handleAction(
+                            proposal.id,
+                            "REJECT"
+                          )
+                        }
+                        style={{
+                          padding:
+                            "11px 20px",
+                          borderRadius:
+                            8,
+                          border:
+                            "1px solid #ccc",
+                          background:
+                            "#fff",
+                          cursor:
+                            isProcessing
+                              ? "default"
+                              : "pointer",
+                          opacity:
+                            isProcessing
+                              ? 0.6
+                              : 1,
+                        }}
+                      >
+                        ✕ Отклонить
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </section>
-            );
-          })}
+                </section>
+              );
+            }
+          )}
         </div>
       )}
     </main>

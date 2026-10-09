@@ -39,12 +39,8 @@ export default function ContinuityButton({
   projectId: string;
   chapterId: string;
 }) {
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [report, setReport] =
     useState<ContinuityReport | null>(null);
 
@@ -248,10 +244,6 @@ export default function ContinuityButton({
             overflow: "hidden",
           }}
         >
-          {/* =================================================
-              РЕЗУЛЬТАТ ПРОВЕРКИ
-              ================================================= */}
-
           <div
             style={{
               padding: 18,
@@ -318,10 +310,6 @@ export default function ContinuityButton({
             </p>
           </div>
 
-          {/* =================================================
-              ПРОБЛЕМЫ
-              ================================================= */}
-
           {report.issues.length === 0 ? (
             <div
               style={{
@@ -363,10 +351,6 @@ export default function ContinuityButton({
               >
                 {report.issues.map(
                   (issue, index) => {
-                    // -----------------------------------------
-                    // Severity
-                    // -----------------------------------------
-
                     const severityValue =
                       issue.severity ??
                       (issue.alertType ===
@@ -381,10 +365,6 @@ export default function ContinuityButton({
                       String(
                         severityValue
                       );
-
-                    // -----------------------------------------
-                    // Severity style
-                    // -----------------------------------------
 
                     const severityStyle =
                       severityText === "HIGH"
@@ -409,10 +389,6 @@ export default function ContinuityButton({
                               "#666",
                           };
 
-                    // -----------------------------------------
-                    // Основные значения
-                    // -----------------------------------------
-
                     const categoryText =
                       issue.category
                         ? String(
@@ -426,10 +402,6 @@ export default function ContinuityButton({
                             issue.title
                           )
                         : "Проблема";
-
-                    // -----------------------------------------
-                    // Explanation
-                    // -----------------------------------------
 
                     const explanation =
                       getExplanation(
@@ -479,8 +451,6 @@ export default function ContinuityButton({
                           padding: 16,
                         }}
                       >
-                        {/* Заголовок */}
-
                         <div
                           style={{
                             display: "flex",
@@ -523,8 +493,6 @@ export default function ContinuityButton({
                           </span>
                         </div>
 
-                        {/* Категория */}
-
                         {categoryText && (
                           <div
                             style={{
@@ -539,8 +507,6 @@ export default function ContinuityButton({
                           </div>
                         )}
 
-                        {/* Место */}
-
                         {locationText && (
                           <div
                             style={{
@@ -554,8 +520,6 @@ export default function ContinuityButton({
                             {locationText}
                           </div>
                         )}
-
-                        {/* Evidence */}
 
                         {issue.evidence !==
                           null &&
@@ -594,8 +558,6 @@ export default function ContinuityButton({
                             </div>
                           )}
 
-                        {/* Recommendation */}
-
                         {recommendationText && (
                           <div
                             style={{
@@ -627,8 +589,6 @@ export default function ContinuityButton({
                             </div>
                           </div>
                         )}
-
-                        {/* Explanations */}
 
                         {!locationText &&
                           !recommendationText &&

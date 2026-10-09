@@ -32,10 +32,6 @@ export async function POST(
   }
 ) {
   try {
-    // =====================================================
-    // 1. AUTH
-    // =====================================================
-
     const session = await auth();
 
     if (!session?.user?.id) {
@@ -49,24 +45,23 @@ export async function POST(
       );
     }
 
-    // =====================================================
-    // 2. PARAMS
-    // =====================================================
+    const {
+      id,
+      chapterId,
+    } = await params;
 
-    const { id, chapterId } = await params;
+    const body =
+      await request.json();
 
-    // =====================================================
-    // 3. BODY
-    // =====================================================
-
-    const body = await request.json();
-
-    const selections = body?.selections as
-      | Selection[]
-      | undefined;
+    const selections =
+      body?.selections as
+        | Selection[]
+        | undefined;
 
     if (
-      !Array.isArray(selections) ||
+      !Array.isArray(
+        selections
+      ) ||
       selections.length === 0
     ) {
       return NextResponse.json(
@@ -79,10 +74,6 @@ export async function POST(
         }
       );
     }
-
-    // =====================================================
-    // 4. PROJECT
-    // =====================================================
 
     const project =
       await prisma.project.findFirst({
@@ -106,10 +97,6 @@ export async function POST(
         }
       );
     }
-
-    // =====================================================
-    // 5. CHAPTER
-    // =====================================================
 
     const chapter =
       await prisma.chapter.findFirst({
@@ -135,7 +122,9 @@ export async function POST(
       );
     }
 
-    if (!chapter.draftText?.trim()) {
+    if (
+      !chapter.draftText?.trim()
+    ) {
       return NextResponse.json(
         {
           error:
@@ -147,11 +136,9 @@ export async function POST(
       );
     }
 
-    // =====================================================
-    // 6. OPENAI KEY
-    // =====================================================
-
-    if (!process.env.OPENAI_API_KEY) {
+    if (
+      !process.env.OPENAI_API_KEY
+    ) {
       return NextResponse.json(
         {
           error:
@@ -163,46 +150,45 @@ export async function POST(
       );
     }
 
-    // =====================================================
-    // 7. НОРМАЛИЗАЦИЯ ВЫБРАННЫХ ИСПРАВЛЕНИЙ
-    // =====================================================
-
     const cleanSelections =
-      selections.map((item) => ({
-        issueId: String(
-          item.issueId || ""
-        ),
-
-        problemTitle: String(
-          item.problemTitle || ""
-        ),
-
-        suggestion: {
-          title: String(
-            item.suggestion?.title || ""
+      selections.map(
+        (item) => ({
+          issueId: String(
+            item.issueId || ""
           ),
 
-          explanation: String(
-            item.suggestion?.explanation || ""
+          problemTitle: String(
+            item.problemTitle || ""
           ),
 
-          changes: Array.isArray(
-            item.suggestion?.changes
-          )
-            ? item.suggestion.changes.map(
-                String
+          suggestion: {
+            title: String(
+              item.suggestion?.title ||
+                ""
+            ),
+
+            explanation: String(
+              item.suggestion
+                ?.explanation || ""
+            ),
+
+            changes:
+              Array.isArray(
+                item.suggestion
+                  ?.changes
               )
-            : [],
+                ? item.suggestion.changes.map(
+                    String
+                  )
+                : [],
 
-          excerpt: String(
-            item.suggestion?.excerpt || ""
-          ),
-        },
-      }));
-
-    // =====================================================
-    // 8. ПРОМПТ
-    // =====================================================
+            excerpt: String(
+              item.suggestion
+                ?.excerpt || ""
+            ),
+          },
+        })
+      );
 
     const prompt = `
 Ты — литературный редактор Story Architect.
@@ -249,7 +235,10 @@ ${chapter.book.title}
 ГЛАВА
 =====================================================
 
-${chapter.number}. ${chapter.title || "Без названия"}
+${chapter.number}. ${
+      chapter.title ||
+      "Без названия"
+    }
 
 =====================================================
 ВЫБРАННЫЕ АВТОРОМ ИСПРАВЛЕНИЯ
@@ -275,10 +264,6 @@ ${chapter.draftText}
 Просто верни результат для предпросмотра автору.
 `;
 
-    // =====================================================
-    // 9. OPENAI
-    // =====================================================
-
     const response =
       await openai.chat.completions.create({
         model: "gpt-5.6-luna",
@@ -300,14 +285,16 @@ ${chapter.draftText}
           type: "json_schema",
 
           json_schema: {
-            name: "combined_chapter_revision",
+            name:
+              "combined_chapter_revision",
 
             strict: true,
 
             schema: {
               type: "object",
 
-              additionalProperties: false,
+              additionalProperties:
+                false,
 
               properties: {
                 revisedDraft: {
@@ -328,12 +315,9 @@ ${chapter.draftText}
         },
       });
 
-    // =====================================================
-    // 10. AI OUTPUT
-    // =====================================================
-
     const content =
-      response.choices[0]?.message?.content;
+      response.choices[0]?.message
+        ?.content;
 
     if (!content) {
       return NextResponse.json(
@@ -347,17 +331,15 @@ ${chapter.draftText}
       );
     }
 
-    // =====================================================
-    // 11. PARSE
-    // =====================================================
-
     let result: {
       revisedDraft: string;
       changeSummary: string;
     };
 
     try {
-      result = JSON.parse(content);
+      result = JSON.parse(
+        content
+      );
     } catch (error) {
       console.error(
         "Combined revision JSON parse error:",
@@ -375,10 +357,6 @@ ${chapter.draftText}
       );
     }
 
-    // =====================================================
-    // 12. VALIDATION
-    // =====================================================
-
     if (
       !result.revisedDraft?.trim()
     ) {
@@ -392,10 +370,6 @@ ${chapter.draftText}
         }
       );
     }
-
-    // =====================================================
-    // 13. RESPONSE
-    // =====================================================
 
     return NextResponse.json({
       ok: true,

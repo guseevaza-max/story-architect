@@ -28,15 +28,18 @@ export async function POST(
       );
     }
 
-    const { id: projectId, chapterId } =
-      await context.params;
+    const {
+      id: projectId,
+      chapterId,
+    } = await context.params;
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        userId: session.user.id,
-      },
-    });
+    const project =
+      await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          userId: session.user.id,
+        },
+      });
 
     if (!project) {
       return NextResponse.json(
@@ -44,15 +47,6 @@ export async function POST(
         { status: 404 }
       );
     }
-
-    // =====================================================
-    // ГЛАВА
-    // =====================================================
-    // ВАЖНО:
-    // Chapter -> Book -> Project
-    //
-    // projectId нельзя сравнивать напрямую с bookId.
-    // =====================================================
 
     const chapter =
       await prisma.chapter.findFirst({
@@ -114,17 +108,19 @@ export async function POST(
       );
     }
 
-    const issues = report.issues.map((issue) => ({
-      id: issue.id,
-      title: issue.title,
-      category: issue.category,
-      alertType: issue.alertType,
-      priority: issue.priority,
-      evidence: issue.evidence,
-      explanations: issue.explanations,
-      suggestedResolutions:
-        issue.suggestedResolutions,
-    }));
+    const issues =
+      report.issues.map((issue) => ({
+        id: issue.id,
+        title: issue.title,
+        category: issue.category,
+        alertType: issue.alertType,
+        priority: issue.priority,
+        evidence: issue.evidence,
+        explanations:
+          issue.explanations,
+        suggestedResolutions:
+          issue.suggestedResolutions,
+      }));
 
     const prompt = `
 Ты — редактор художественного текста Story Architect.
@@ -148,7 +144,11 @@ ${chapter.draftText}
 
 НАЙДЕННЫЕ ПРОБЛЕМЫ:
 
-${JSON.stringify(issues, null, 2)}
+${JSON.stringify(
+  issues,
+  null,
+  2
+)}
 
 Для каждой проблемы верни:
 
@@ -184,11 +184,15 @@ ${JSON.stringify(issues, null, 2)}
 
         response_format: {
           type: "json_schema",
+
           json_schema: {
             name: "continuity_suggestions",
+
             strict: true,
+
             schema: {
               type: "object",
+
               additionalProperties: false,
 
               properties: {
@@ -197,7 +201,9 @@ ${JSON.stringify(issues, null, 2)}
 
                   items: {
                     type: "object",
-                    additionalProperties: false,
+
+                    additionalProperties:
+                      false,
 
                     properties: {
                       issueId: {
@@ -213,7 +219,9 @@ ${JSON.stringify(issues, null, 2)}
 
                         items: {
                           type: "object",
-                          additionalProperties: false,
+
+                          additionalProperties:
+                            false,
 
                           properties: {
                             title: {
@@ -226,6 +234,7 @@ ${JSON.stringify(issues, null, 2)}
 
                             changes: {
                               type: "array",
+
                               items: {
                                 type: "string",
                               },
@@ -297,6 +306,7 @@ ${JSON.stringify(issues, null, 2)}
 
     return NextResponse.json({
       ok: true,
+
       suggestions:
         result.suggestions ?? [],
     });
