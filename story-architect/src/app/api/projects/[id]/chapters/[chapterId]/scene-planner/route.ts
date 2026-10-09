@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import { buildStoryState } from "@/lib/context/storyState";
 import OpenAI from "openai";
 
 const prisma = new PrismaClient();
@@ -90,6 +91,13 @@ export async function POST(
 
     const chapterPlan = chapter.plan;
 
+    const storyState = await buildStoryState({
+      projectId: project.id,
+      bookId: chapter.bookId,
+      bookNumber: chapter.book.number,
+      chapterNumber: chapter.number,
+    });
+
     const response = await openai.responses.create({
       model: "gpt-5.6-luna",
 
@@ -118,6 +126,8 @@ export async function POST(
 11. Если конкретная деталь неизвестна, оставь её неопределённой
     или укажи вопрос в openQuestions.
 12. Scene Plan — это предложение для автора, а не Canon.
+13. Учитывай состояние истории (персонажи и отношения на начало главы):
+    не противоречь ему и не создавай сцены, которые его игнорируют.
 
 Обычно используй от 3 до 8 сцен.
 Количество сцен выбирай по сложности главы.
@@ -145,6 +155,10 @@ ${chapter.title || `Глава ${chapter.number}`}
 
 Идея автора:
 ${chapter.authorIdea || "Не указана"}
+
+Состояние истории на начало главы:
+
+${storyState}
 
 Утверждённый план главы:
 

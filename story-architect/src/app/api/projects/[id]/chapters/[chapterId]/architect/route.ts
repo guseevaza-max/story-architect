@@ -6,6 +6,7 @@ import {
   ProposalOp,
 } from "@prisma/client";
 import { auth } from "@/auth";
+import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
 
 const prisma = new PrismaClient();
 
@@ -236,21 +237,17 @@ ${
     // Семантический vector search подключим следующим этапом.
     // =====================================================
 
+    // Память только предыдущих глав: будущие главы в контекст не попадают.
+    const storyRef = {
+      projectId: project.id,
+      bookId: chapter.bookId,
+      bookNumber: chapter.book.number,
+      chapterNumber: chapter.number,
+    };
+
     const memoryChunks =
       await prisma.memoryChunk.findMany({
-        where: {
-          projectId: project.id,
-          OR: [
-            {
-              chapterId: null,
-            },
-            {
-              chapterId: {
-                not: chapter.id,
-              },
-            },
-          ],
-        },
+        where: memoryChunksBefore(storyRef),
         select: {
           kind: true,
           content: true,
@@ -279,6 +276,9 @@ ${
             })
             .join("\n\n")
         : "Сохранённой долгосрочной памяти пока нет.";
+
+    // Накопленное состояние персонажей и отношений на начало главы.
+    const storyState = await buildStoryState(storyRef);
 
     // =====================================================
     // 9. SYSTEM PROMPT
@@ -446,6 +446,15 @@ LONG-TERM MEMORY
 =====================================================
 
 ${memoryContext}
+
+
+=====================================================
+STORY STATE
+(подтверждённое состояние персонажей и отношений на начало главы;
+не противоречь ему без явного основания в идее автора)
+=====================================================
+
+${storyState}
 
 
 =====================================================

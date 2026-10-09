@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
+import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -81,7 +82,15 @@ export async function POST(
       );
     }
 
-    const [canonFacts, previousChapter, memoryChunks] = await Promise.all([
+    const storyRef = {
+      projectId: project.id,
+      bookId: chapter.bookId,
+      bookNumber: chapter.book.number,
+      chapterNumber: chapter.number,
+    };
+
+    const [canonFacts, previousChapter, memoryChunks, storyState] =
+      await Promise.all([
       prisma.canonFact.findMany({
         where: {
           projectId: project.id,
@@ -122,14 +131,13 @@ export async function POST(
       }),
 
       prisma.memoryChunk.findMany({
-        where: {
-          projectId: project.id,
-          OR: [{ chapterId: null }, { chapterId: { not: chapter.id } }],
-        },
+        where: memoryChunksBefore(storyRef),
         select: { kind: true, content: true, metadata: true },
         orderBy: { createdAt: "desc" },
         take: 30,
       }),
+
+      buildStoryState(storyRef),
     ]);
 
     const canonContext = canonFacts.length
@@ -200,6 +208,9 @@ export async function POST(
 
 CANON FACTS:
 ${canonContext}
+
+СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ (персонажи и отношения, не противоречь):
+${storyState}
 
 ПРЕДЫДУЩАЯ ГЛАВА:
 ${previousChapterSummary}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
+import { buildStoryState } from "@/lib/context/storyState";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -275,6 +276,13 @@ FAIL:
     // 9. USER PROMPT
     // =====================================================
 
+    const storyState = await buildStoryState({
+      projectId: project.id,
+      bookId: chapter.bookId,
+      bookNumber: chapter.book.number,
+      chapterNumber: chapter.number,
+    });
+
     const userPrompt = `
 ПРОЕКТ:
 ${project.name}
@@ -293,6 +301,10 @@ ${plan}
 
 УТВЕРЖДЁННЫЙ ПЛАН СЦЕН:
 ${scenes || "План сцен отсутствует."}
+
+ПОДТВЕРЖДЁННОЕ СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ
+(персонажи и отношения; проверь, не противоречит ли ему черновик):
+${storyState}
 
 ЧЕРНОВИК ГЛАВЫ:
 ${chapter.draftText}
