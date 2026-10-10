@@ -1,0 +1,659 @@
+diff --git a/story-architect/src/app/projects/[id]/_components/PageShell.tsx b/story-architect/src/app/projects/[id]/_components/PageShell.tsx
+new file mode 100644
+index 0000000..694d64f
+--- /dev/null
++++ b/story-architect/src/app/projects/[id]/_components/PageShell.tsx
+@@ -0,0 +1,148 @@
++import Link from "next/link";
++import type { ReactNode } from "react";
++
++/**
++ * Общая оболочка read-only страниц проекта
++ * (Relationships, Plot Lines, Timeline).
++ * Папка _components приватная: Next.js не превращает её в маршрут.
++ */
++export function PageShell({
++  projectId,
++  title,
++  subtitle,
++  badge,
++  children,
++}: {
++  projectId: string;
++  title: string;
++  subtitle: string;
++  badge: string;
++  children: ReactNode;
++}) {
++  return (
++    <main
++      style={{
++        maxWidth: 1100,
++        margin: "0 auto",
++        padding: 40,
++        fontFamily: "Arial, sans-serif",
++      }}
++    >
++      <div style={{ marginBottom: 30 }}>
++        <Link href={`/projects/${projectId}`}>← Назад в проект</Link>
++      </div>
++
++      <div
++        style={{
++          display: "flex",
++          justifyContent: "space-between",
++          alignItems: "flex-start",
++          gap: 20,
++          marginBottom: 30,
++        }}
++      >
++        <div>
++          <h1 style={{ margin: "0 0 8px" }}>{title}</h1>
++          <p style={{ margin: 0, color: "#666", fontSize: 18 }}>{subtitle}</p>
++        </div>
++
++        <div
++          style={{
++            padding: "10px 16px",
++            borderRadius: 20,
++            background: "#f3f4f6",
++            fontWeight: 600,
++            whiteSpace: "nowrap",
++          }}
++        >
++          {badge}
++        </div>
++      </div>
++
++      {children}
++    </main>
++  );
++}
++
++export function EmptyState({
++  icon,
++  title,
++  text,
++  href,
++  linkLabel,
++}: {
++  icon: string;
++  title: string;
++  text: string;
++  href: string;
++  linkLabel: string;
++}) {
++  return (
++    <section
++      style={{
++        padding: 50,
++        border: "1px solid #ddd",
++        borderRadius: 12,
++        textAlign: "center",
++      }}
++    >
++      <div style={{ fontSize: 48, marginBottom: 15 }}>{icon}</div>
++      <h2>{title}</h2>
++      <p style={{ color: "#666" }}>{text}</p>
++      <Link
++        href={href}
++        style={{
++          display: "inline-block",
++          marginTop: 16,
++          padding: "12px 20px",
++          borderRadius: 8,
++          background: "#111",
++          color: "#fff",
++          textDecoration: "none",
++        }}
++      >
++        {linkLabel}
++      </Link>
++    </section>
++  );
++}
++
++const TONES = {
++  green: { background: "#e8f5e9", color: "#26733a" },
++  gray: { background: "#f3f4f6", color: "#555" },
++  amber: { background: "#fff4e0", color: "#8a5a00" },
++  blue: { background: "#e8f0fe", color: "#1a56b0" },
++} as const;
++
++export function Pill({
++  text,
++  tone = "gray",
++}: {
++  text: string;
++  tone?: keyof typeof TONES;
++}) {
++  const colors = TONES[tone];
++
++  return (
++    <span
++      style={{
++        padding: "5px 9px",
++        borderRadius: 20,
++        background: colors.background,
++        color: colors.color,
++        fontSize: 12,
++        fontWeight: 700,
++        whiteSpace: "nowrap",
++      }}
++    >
++      {text}
++    </span>
++  );
++}
++
++export const cardStyle = {
++  border: "1px solid #ddd",
++  borderRadius: 12,
++  padding: 24,
++  background: "#fff",
++} as const;
+diff --git a/story-architect/src/app/projects/[id]/page.tsx b/story-architect/src/app/projects/[id]/page.tsx
+index e5f440e..6b0e537 100644
+--- a/story-architect/src/app/projects/[id]/page.tsx
++++ b/story-architect/src/app/projects/[id]/page.tsx
+@@ -245,6 +245,72 @@ export default async function ProjectPage({
+ 
+           <strong>Открыть Memory →</strong>
+         </Link>
++
++        {/* Relationships */}
++        <Link
++          href={`/projects/${project.id}/relationships`}
++          style={{
++            display: "block",
++            textDecoration: "none",
++            color: "inherit",
++            border: "1px solid #ddd",
++            borderRadius: 14,
++            padding: 24,
++            background: "#fff",
++          }}
++        >
++          <h2 style={{ marginTop: 0 }}>🤝 Relationships</h2>
++
++          <p style={{ color: "#666", lineHeight: 1.6 }}>
++            Действующие отношения персонажей и история их изменений.
++          </p>
++
++          <strong>Открыть отношения →</strong>
++        </Link>
++
++        {/* Plot Lines */}
++        <Link
++          href={`/projects/${project.id}/plot-lines`}
++          style={{
++            display: "block",
++            textDecoration: "none",
++            color: "inherit",
++            border: "1px solid #ddd",
++            borderRadius: 14,
++            padding: 24,
++            background: "#fff",
++          }}
++        >
++          <h2 style={{ marginTop: 0 }}>🧵 Plot Lines</h2>
++
++          <p style={{ color: "#666", lineHeight: 1.6 }}>
++            Сюжетные линии, их этапы и прогресс по главам.
++          </p>
++
++          <strong>Открыть линии →</strong>
++        </Link>
++
++        {/* Timeline */}
++        <Link
++          href={`/projects/${project.id}/timeline`}
++          style={{
++            display: "block",
++            textDecoration: "none",
++            color: "inherit",
++            border: "1px solid #ddd",
++            borderRadius: 14,
++            padding: 24,
++            background: "#fff",
++          }}
++        >
++          <h2 style={{ marginTop: 0 }}>🕰️ Timeline</h2>
++
++          <p style={{ color: "#666", lineHeight: 1.6 }}>
++            События истории в хронологическом порядке.
++          </p>
++
++          <strong>Открыть таймлайн →</strong>
++        </Link>
+       </section>
+     </main>
+   );
+diff --git a/story-architect/src/app/projects/[id]/plot-lines/page.tsx b/story-architect/src/app/projects/[id]/plot-lines/page.tsx
+new file mode 100644
+index 0000000..0b1da3a
+--- /dev/null
++++ b/story-architect/src/app/projects/[id]/plot-lines/page.tsx
+@@ -0,0 +1,146 @@
++import { notFound, redirect } from "next/navigation";
++import { auth } from "@/auth";
++import { prisma } from "@/lib/db";
++import {
++  EmptyState,
++  PageShell,
++  Pill,
++  cardStyle,
++} from "../_components/PageShell";
++
++const STATUS_TONE = {
++  ACTIVE: "green",
++  DORMANT: "amber",
++  RESOLVED: "blue",
++  ABANDONED: "gray",
++  UNKNOWN: "gray",
++} as const;
++
++export default async function PlotLinesPage({
++  params,
++}: {
++  params: Promise<{ id: string }>;
++}) {
++  const session = await auth();
++
++  if (!session?.user?.id) {
++    redirect("/login");
++  }
++
++  const { id } = await params;
++
++  const project = await prisma.project.findFirst({
++    where: { id, userId: session.user.id },
++    select: { id: true, name: true },
++  });
++
++  if (!project) {
++    notFound();
++  }
++
++  const plotLines = await prisma.plotLine.findMany({
++    where: { projectId: project.id, status: "CANON" },
++    include: { stages: { orderBy: { order: "asc" } } },
++    orderBy: { createdAt: "asc" },
++  });
++
++  return (
++    <PageShell
++      projectId={project.id}
++      title="Plot Lines"
++      subtitle={`Сюжетные линии проекта ${project.name}`}
++      badge={`${plotLines.length} линий`}
++    >
++      {plotLines.length === 0 ? (
++        <EmptyState
++          icon="🧵"
++          title="Пока нет сюжетных линий"
++          text="Сюжетные линии появятся здесь после принятия AI-предложений в Canon."
++          href={`/projects/${project.id}/proposals`}
++          linkLabel="Открыть предложения AI"
++        />
++      ) : (
++        <div style={{ display: "grid", gap: 20 }}>
++          {plotLines.map((line) => (
++            <article key={line.id} style={cardStyle}>
++              <div
++                style={{
++                  display: "flex",
++                  justifyContent: "space-between",
++                  alignItems: "flex-start",
++                  gap: 12,
++                }}
++              >
++                <h2 style={{ margin: 0 }}>{line.name}</h2>
++                <Pill
++                  text={line.plotStatus}
++                  tone={STATUS_TONE[line.plotStatus]}
++                />
++              </div>
++
++              {line.premise && (
++                <p style={{ color: "#555", lineHeight: 1.6 }}>
++                  {line.premise}
++                </p>
++              )}
++
++              {line.objective && (
++                <p>
++                  <strong>Цель:</strong> {line.objective}
++                </p>
++              )}
++
++              {line.currentState && (
++                <p>
++                  <strong>Сейчас:</strong> {line.currentState}
++                </p>
++              )}
++
++              {line.actualProgress && (
++                <p>
++                  <strong>Фактический прогресс:</strong>{" "}
++                  {line.actualProgress}
++                </p>
++              )}
++
++              {line.plannedResolution && (
++                <p>
++                  <strong>Планируемая развязка:</strong>{" "}
++                  {line.plannedResolution}
++                </p>
++              )}
++
++              <p style={{ color: "#777", fontSize: 14 }}>
++                {line.lastProgressChapter !== null
++                  ? `Последний прогресс: глава ${line.lastProgressChapter}`
++                  : "Прогресса по линии пока не зафиксировано"}
++              </p>
++
++              {line.stages.length > 0 && (
++                <>
++                  <h3 style={{ marginBottom: 8 }}>Этапы</h3>
++                  <ol style={{ margin: 0, paddingLeft: 22, lineHeight: 1.7 }}>
++                    {line.stages.map((stage) => (
++                      <li key={stage.id}>
++                        <strong>{stage.name}</strong>
++                        {stage.description ? ` — ${stage.description}` : ""}
++                        <span style={{ color: "#777", fontSize: 14 }}>
++                          {stage.plannedChapter !== null
++                            ? ` · план: глава ${stage.plannedChapter}`
++                            : ""}
++                          {stage.actualChapter !== null
++                            ? ` · факт: глава ${stage.actualChapter}`
++                            : ""}
++                        </span>
++                      </li>
++                    ))}
++                  </ol>
++                </>
++              )}
++            </article>
++          ))}
++        </div>
++      )}
++    </PageShell>
++  );
++}
+diff --git a/story-architect/src/app/projects/[id]/relationships/page.tsx b/story-architect/src/app/projects/[id]/relationships/page.tsx
+new file mode 100644
+index 0000000..f4ad8b0
+--- /dev/null
++++ b/story-architect/src/app/projects/[id]/relationships/page.tsx
+@@ -0,0 +1,130 @@
++import { notFound, redirect } from "next/navigation";
++import { auth } from "@/auth";
++import { prisma } from "@/lib/db";
++import {
++  EmptyState,
++  PageShell,
++  Pill,
++  cardStyle,
++} from "../_components/PageShell";
++
++export default async function RelationshipsPage({
++  params,
++}: {
++  params: Promise<{ id: string }>;
++}) {
++  const session = await auth();
++
++  if (!session?.user?.id) {
++    redirect("/login");
++  }
++
++  const { id } = await params;
++
++  const project = await prisma.project.findFirst({
++    where: { id, userId: session.user.id },
++    select: { id: true, name: true },
++  });
++
++  if (!project) {
++    notFound();
++  }
++
++  const relationships = await prisma.relationship.findMany({
++    where: { projectId: project.id, status: "CANON" },
++    include: {
++      source: { select: { name: true } },
++      target: { select: { name: true } },
++    },
++    orderBy: [{ validFromChapter: "asc" }, { createdAt: "asc" }],
++  });
++
++  const active = relationships.filter((r) => r.validToChapter === null);
++  const history = relationships.filter((r) => r.validToChapter !== null);
++
++  const renderCard = (r: (typeof relationships)[number], closed: boolean) => (
++    <article
++      key={r.id}
++      style={{ ...cardStyle, opacity: closed ? 0.75 : 1 }}
++    >
++      <div
++        style={{
++          display: "flex",
++          justifyContent: "space-between",
++          alignItems: "flex-start",
++          gap: 12,
++        }}
++      >
++        <h3 style={{ margin: 0 }}>
++          {r.source.name} → {r.target.name}
++        </h3>
++        <Pill text={r.relationType} tone={closed ? "gray" : "blue"} />
++      </div>
++
++      {r.reason && (
++        <p style={{ color: "#555", lineHeight: 1.6 }}>{r.reason}</p>
++      )}
++
++      <p style={{ color: "#777", fontSize: 14, marginBottom: 0 }}>
++        {r.validFromChapter !== null
++          ? `С главы ${r.validFromChapter}`
++          : "С начала истории"}
++        {r.validToChapter !== null
++          ? ` по главу ${r.validToChapter}`
++          : " — действует сейчас"}
++        {r.value !== null ? ` · сила: ${r.value}` : ""}
++      </p>
++    </article>
++  );
++
++  return (
++    <PageShell
++      projectId={project.id}
++      title="Relationships"
++      subtitle={`Отношения персонажей проекта ${project.name}`}
++      badge={`${active.length} действующих`}
++    >
++      {relationships.length === 0 ? (
++        <EmptyState
++          icon="🤝"
++          title="Пока нет отношений"
++          text="Отношения появятся здесь после принятия Memory Update утверждённой главы."
++          href={`/projects/${project.id}/proposals`}
++          linkLabel="Открыть предложения AI"
++        />
++      ) : (
++        <>
++          <h2>Действующие</h2>
++          {active.length === 0 ? (
++            <p style={{ color: "#666" }}>Действующих отношений нет.</p>
++          ) : (
++            <div
++              style={{
++                display: "grid",
++                gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
++                gap: 20,
++              }}
++            >
++              {active.map((r) => renderCard(r, false))}
++            </div>
++          )}
++
++          {history.length > 0 && (
++            <>
++              <h2 style={{ marginTop: 40 }}>История изменений</h2>
++              <div
++                style={{
++                  display: "grid",
++                  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
++                  gap: 20,
++                }}
++              >
++                {history.map((r) => renderCard(r, true))}
++              </div>
++            </>
++          )}
++        </>
++      )}
++    </PageShell>
++  );
++}
+diff --git a/story-architect/src/app/projects/[id]/timeline/page.tsx b/story-architect/src/app/projects/[id]/timeline/page.tsx
+new file mode 100644
+index 0000000..3aa0627
+--- /dev/null
++++ b/story-architect/src/app/projects/[id]/timeline/page.tsx
+@@ -0,0 +1,134 @@
++import { notFound, redirect } from "next/navigation";
++import { auth } from "@/auth";
++import { prisma } from "@/lib/db";
++import {
++  EmptyState,
++  PageShell,
++  Pill,
++  cardStyle,
++} from "../_components/PageShell";
++
++export default async function TimelinePage({
++  params,
++}: {
++  params: Promise<{ id: string }>;
++}) {
++  const session = await auth();
++
++  if (!session?.user?.id) {
++    redirect("/login");
++  }
++
++  const { id } = await params;
++
++  const project = await prisma.project.findFirst({
++    where: { id, userId: session.user.id },
++    select: { id: true, name: true },
++  });
++
++  if (!project) {
++    notFound();
++  }
++
++  const found = await prisma.event.findMany({
++    where: { projectId: project.id, status: "CANON" },
++    include: {
++      effectLinks: {
++        include: { effectEvent: { select: { name: true } } },
++      },
++    },
++  });
++
++  // Порядок: ось времени вселенной, затем глава, затем создание.
++  // События без даты и главы уходят в конец.
++  const events = [...found].sort((a, b) => {
++    const byTime =
++      (a.timeIndex ?? Number.POSITIVE_INFINITY) -
++      (b.timeIndex ?? Number.POSITIVE_INFINITY);
++    if (Number.isFinite(byTime) && byTime !== 0) return byTime;
++
++    const byChapter =
++      (a.chapterNumber ?? Number.POSITIVE_INFINITY) -
++      (b.chapterNumber ?? Number.POSITIVE_INFINITY);
++    if (Number.isFinite(byChapter) && byChapter !== 0) return byChapter;
++
++    return a.createdAt.getTime() - b.createdAt.getTime();
++  });
++
++  return (
++    <PageShell
++      projectId={project.id}
++      title="Timeline"
++      subtitle={`События проекта ${project.name}`}
++      badge={`${events.length} событий`}
++    >
++      {events.length === 0 ? (
++        <EmptyState
++          icon="🕰️"
++          title="Пока нет событий"
++          text="События появятся здесь после принятия AI-предложений в Canon."
++          href={`/projects/${project.id}/proposals`}
++          linkLabel="Открыть предложения AI"
++        />
++      ) : (
++        <div style={{ borderLeft: "3px solid #ddd", paddingLeft: 24 }}>
++          {events.map((event) => (
++            <article
++              key={event.id}
++              style={{ ...cardStyle, marginBottom: 20 }}
++            >
++              <div
++                style={{
++                  display: "flex",
++                  justifyContent: "space-between",
++                  alignItems: "flex-start",
++                  gap: 12,
++                  flexWrap: "wrap",
++                }}
++              >
++                <h2 style={{ margin: 0 }}>{event.name}</h2>
++
++                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
++                  <Pill
++                    text={event.inWorldDate ?? "дата неизвестна"}
++                    tone={event.inWorldDate ? "blue" : "amber"}
++                  />
++                  {event.chapterNumber !== null && (
++                    <Pill text={`глава ${event.chapterNumber}`} />
++                  )}
++                </div>
++              </div>
++
++              {event.description && (
++                <p style={{ color: "#555", lineHeight: 1.6 }}>
++                  {event.description}
++                </p>
++              )}
++
++              {event.cause && (
++                <p>
++                  <strong>Причина:</strong> {event.cause}
++                </p>
++              )}
++
++              {event.consequences && (
++                <p>
++                  <strong>Последствия:</strong> {event.consequences}
++                </p>
++              )}
++
++              {event.effectLinks.length > 0 && (
++                <p style={{ color: "#777", fontSize: 14, marginBottom: 0 }}>
++                  Привело к:{" "}
++                  {event.effectLinks
++                    .map((link) => link.effectEvent.name)
++                    .join(", ")}
++                </p>
++              )}
++            </article>
++          ))}
++        </div>
++      )}
++    </PageShell>
++  );
++}

@@ -19,6 +19,7 @@ import {
 } from "./proposal-state";
 
 import { proposalPayloadSchema } from "@/lib/schemas/proposal";
+import { planRelationshipMerge } from "./relationshipMerge";
 
 
 
@@ -3844,131 +3845,111 @@ export async function applyProposal(
 
 
 
-            const previousRelationship =
-
-              await tx.relationship.findFirst(
-
+            const activeRelationships =
+              await tx.relationship.findMany(
                 {
-
                   where: {
-
                     projectId:
-
                       proposal.projectId,
-
                     sourceId,
-
                     targetId,
-
                     relationType:
-
                       change.relationType,
-
                     status:
-
                       "CANON",
-
-                    validFromChapter: {
-
-                      lte:
-
-                        chapter.number,
-
-                    },
-
-                    OR: [
-
+                    AND: [
                       {
-
-                        validToChapter:
-
-                          null,
-
+                        OR: [
+                          {
+                            validFromChapter:
+                              null,
+                          },
+                          {
+                            validFromChapter: {
+                              lte:
+                                chapter.number,
+                            },
+                          },
+                        ],
                       },
-
                       {
-
-                        validToChapter: {
-
-                          gte:
-
-                            chapter.number,
-
-                        },
-
+                        OR: [
+                          {
+                            validToChapter:
+                              null,
+                          },
+                          {
+                            validToChapter: {
+                              gte:
+                                chapter.number,
+                            },
+                          },
+                        ],
                       },
-
                     ],
-
                   },
-
-                  orderBy: [
-
-                    {
-
-                      validFromChapter:
-
-                        "desc",
-
-                    },
-
-                    {
-
-                      createdAt:
-
-                        "desc",
-
-                    },
-
-                  ],
-
-                }
-
-              );
-
-
-
-            if (
-
-              previousRelationship &&
-
-              previousRelationship.validFromChapter !==
-
-                chapter.number
-
-            ) {
-
-              await tx.relationship.update(
-
-                {
-
-                  where: {
-
-                    id:
-
-                      previousRelationship.id,
-
-                  },
-
-                  data: {
-
+                  select: {
+                    id: true,
+                    validFromChapter:
+                      true,
                     validToChapter:
-
-                      chapter.number - 1,
-
+                      true,
+                    createdAt: true,
                   },
-
                 }
-
               );
-
+            // Слияние отношения: повторное изменение в этой же главе обновляет
+            // запись, все более ранние действующие записи пары закрываются.
+            // Закрытые записи остаются как история, ничего не удаляется.
+            const mergePlan =
+              planRelationshipMerge(
+                activeRelationships,
+                chapter.number
+              );
+            if (
+              mergePlan.closeIds.length >
+              0
+            ) {
+              await tx.relationship.updateMany(
+                {
+                  where: {
+                    id: {
+                      in: mergePlan.closeIds,
+                    },
+                  },
+                  data: {
+                    validToChapter:
+                      chapter.number - 1,
+                  },
+                }
+              );
             }
+            
 
 
 
             const relationship =
-
-              await tx.relationship.create(
+              mergePlan.action ===
+                "update" &&
+              mergePlan.updateId
+                ? await tx.relationship.update(
+                    {
+                      where: {
+                        id: mergePlan.updateId,
+                      },
+                      data: {
+                        reason:
+                          change.newValue,
+                        lastChangedChapter:
+                          chapter.number,
+                        sourceChapterId:
+                          chapter.id,
+                        confidence:
+                          change.confidence,
+                      },
+                    }
+                  )
+                : await tx.relationship.create(
 
                 {
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 
 type AnalysisResult = {
@@ -32,14 +33,220 @@ const sections: {
   { key: "openQuestions", title: "❓ Открытые вопросы" },
 ];
 
+type ProposalSummary = {
+  created: Record<string, number>;
+  createdTotal: number;
+  skipped: { category: string; text: string; reason: string }[];
+  notMapped: {
+    facts: number;
+    relationships: number;
+    secrets: number;
+    openQuestions: number;
+  };
+  failed: { category: string; error: string }[];
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  characters: "Персонажи",
+  locations: "Локации",
+  factions: "Фракции",
+  worldRules: "Правила мира",
+  events: "События",
+  plotLines: "Сюжетные линии",
+  other: "Прочее",
+};
+
+const SKIP_LABELS: Record<string, string> = {
+  duplicate_canon: "уже есть в Canon",
+  duplicate_pending: "уже ждёт вашего решения",
+  previously_rejected: "ранее отклонено вами",
+  duplicate_in_analysis: "повтор внутри анализа",
+  unnamed: "безымянная фигура: нужно имя",
+  empty: "пустая строка",
+  ambiguous_type: "тип неоднозначен (одно название как локация и фракция)",
+  state_not_location: "государство не создаётся как локация или фракция",
+  state_not_supported:
+    "государство: для него пока нет типа предложения, добавьте вручную",
+  not_a_faction:
+    "государственный орган или абстрактное понятие, не самостоятельная фракция",
+  not_a_plot_line:
+    "единичный факт или последствие, а не развивающаяся сюжетная линия",
+  single_fact: "единичный факт или последствие, не отдельная сущность",
+  low_confidence: "низкая уверенность AI в типе",
+  unsupported_kind: "тип неоднозначен, нужно уточнение автора",
+};
+
 export default function StoryBiblePage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
 
   const [text, setText] = useState("");
+  const [savedText, setSavedText] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">(
+    "idle"
+  );
+  const [saveError, setSaveError] = useState("");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [summary, setSummary] = useState<ProposalSummary | null>(null);
+  const [proposalError, setProposalError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Загрузка сохранённого текста при открытии страницы.
+  useEffect(() => {
+    if (!projectId) return;
+
+    let cancelled = false;
+
+    async function load() {
+      setLoaded(false);
+      setLoadError("");
+
+      try {
+        const response = await fetch(`/api/projects/${projectId}/story-bible`);
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || "Не удалось загрузить сохранённый текст.");
+        }
+
+        if (cancelled) return;
+
+        const stored = typeof data.text === "string" ? data.text : "";
+
+        setText(stored);
+        setSavedText(stored);
+
+        if (data.updatedAt) {
+          setSavedAt(new Date(data.updatedAt));
+        }
+
+        setLoaded(true);
+      } catch (loadFailure) {
+        if (cancelled) return;
+
+        setLoadError(
+          loadFailure instanceof Error
+            ? loadFailure.message
+            : "Не удалось загрузить сохранённый текст."
+        );
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
+
+  const saveText = useCallback(
+    async (value: string): Promise<boolean> => {
+      setSaveState("saving");
+      setSaveError("");
+
+      try {
+        const response = await fetch(`/api/projects/${projectId}/story-bible`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: value }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || "Не удалось сохранить текст.");
+        }
+
+        setSavedText(value);
+        setSavedAt(data.updatedAt ? new Date(data.updatedAt) : new Date());
+        setSaveState("idle");
+
+        return true;
+      } catch (saveFailure) {
+        setSaveState("error");
+        setSaveError(
+          saveFailure instanceof Error
+            ? saveFailure.message
+            : "Не удалось сохранить текст."
+        );
+
+        return false;
+      }
+    },
+    [projectId]
+  );
+
+  const hasUnsaved = loaded && text !== savedText;
+
+  // Автосохранение через 1,5 секунды после последнего изменения.
+  // Не запускается, пока идёт предыдущее сохранение, чтобы старая версия
+  // текста не затёрла новую. После ошибки повторяется только по кнопке
+  // «Сохранить».
+  useEffect(() => {
+    if (!hasUnsaved || saveState !== "idle") return;
+
+    const timer = setTimeout(() => {
+      void saveText(text);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [hasUnsaved, saveState, text, saveText]);
+
+  // Предупреждение браузера, если закрыть вкладку с несохранённым текстом.
+  useEffect(() => {
+    if (!hasUnsaved && saveState !== "saving") return;
+
+    function warn(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", warn);
+
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsaved, saveState]);
+
+  function statusText(): { text: string; color: string } {
+    if (loadError) {
+      return { text: `⚠️ ${loadError}`, color: "#cc0000" };
+    }
+
+    if (!loaded) {
+      return { text: "Загрузка сохранённого текста…", color: "#666" };
+    }
+
+    if (saveState === "saving") {
+      return { text: "Сохранение…", color: "#666" };
+    }
+
+    if (saveState === "error") {
+      return {
+        text: `⚠️ ${saveError || "Не удалось сохранить."} Текст остался на странице.`,
+        color: "#cc0000",
+      };
+    }
+
+    if (hasUnsaved) {
+      return { text: "Есть несохранённые изменения", color: "#8a5a00" };
+    }
+
+    return {
+      text: savedAt
+        ? `✓ Сохранено в ${savedAt.toLocaleTimeString("ru-RU", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`
+        : "✓ Сохранено",
+      color: "#26733a",
+    };
+  }
+
+  const status = statusText();
 
   async function analyzeText() {
     if (!text.trim()) {
@@ -57,6 +264,13 @@ export default function StoryBiblePage() {
     setLoading(true);
     setError("");
     setResult(null);
+    setSummary(null);
+    setProposalError("");
+
+    // Сначала сохраняем текст: анализ не должен приводить к его потере.
+    if (text !== savedText) {
+      await saveText(text);
+    }
 
     try {
       // 1. Анализируем текст через AI
@@ -77,40 +291,40 @@ export default function StoryBiblePage() {
 
       const analysis: AnalysisResult = data.result;
 
-      // 2. Персонажей из AI-анализа создаём как Proposal
-      for (const character of analysis.characters) {
-        const proposalResponse = await fetch("/api/proposals", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            projectId,
-            entityType: "CHARACTER",
-            op: "CREATE",
-            payload: {
-              entityType: "CHARACTER",
-              data: {
-                name: character,
-                description: character,
-              },
-            },
-            reason: "Персонаж извлечён AI из текста Story Bible",
-            safety: "UNCERTAIN",
-          }),
-        });
+      // 2. Показываем результат анализа сразу: он не должен пропасть,
+      //    даже если создание предложений завершится ошибкой.
+      setResult(analysis);
+
+      // 3. Создаём предложения для автора (Canon не меняется).
+      //    Каждая категория обрабатывается независимо на сервере.
+      try {
+        const proposalResponse = await fetch(
+          `/api/projects/${projectId}/story-bible/proposals`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ analysis }),
+          }
+        );
+
+        const proposalData = await proposalResponse.json().catch(() => ({}));
 
         if (!proposalResponse.ok) {
-          const proposalData = await proposalResponse.json();
-
           throw new Error(
-            proposalData.error || "Не удалось создать Proposal"
+            proposalData.error || "Не удалось создать предложения."
           );
         }
-      }
 
-      // 3. Показываем результат анализа
-      setResult(analysis);
+        setSummary(proposalData as ProposalSummary);
+      } catch (proposalFailure) {
+        console.error("Story Bible proposals error:", proposalFailure);
+
+        setProposalError(
+          proposalFailure instanceof Error
+            ? proposalFailure.message
+            : "Не удалось создать предложения."
+        );
+      }
     } catch (error) {
       console.error("Story Bible error:", error);
 
@@ -142,8 +356,13 @@ export default function StoryBiblePage() {
 
       <textarea
         value={text}
+        disabled={!loaded}
         onChange={(event) => setText(event.target.value)}
-        placeholder="Опишите вашу вселенную здесь..."
+        placeholder={
+          loaded
+            ? "Опишите вашу вселенную здесь..."
+            : "Загрузка сохранённого текста..."
+        }
         style={{
           width: "100%",
           minHeight: 400,
@@ -155,10 +374,40 @@ export default function StoryBiblePage() {
         }}
       />
 
+      <div
+        style={{
+          marginTop: 10,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+          fontSize: 14,
+          color: status.color,
+        }}
+      >
+        <span>{status.text}</span>
+
+        {loadError && (
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
+            Повторить загрузку
+          </button>
+        )}
+
+        {loaded && (hasUnsaved || saveState === "error") && (
+          <button
+            type="button"
+            onClick={() => void saveText(text)}
+            disabled={saveState === "saving"}
+          >
+            Сохранить
+          </button>
+        )}
+      </div>
+
       <button
         type="button"
         onClick={analyzeText}
-        disabled={loading}
+        disabled={loading || !loaded}
         style={{
           marginTop: 16,
           padding: "12px 24px",
@@ -190,6 +439,96 @@ export default function StoryBiblePage() {
             Это пока предложение AI. Ничего из этого автоматически
             не становится Canon.
           </p>
+
+          {proposalError && (
+            <div
+              style={{
+                marginTop: 16,
+                padding: 16,
+                border: "1px solid #cc0000",
+                borderRadius: 8,
+              }}
+            >
+              <strong>Предложения не созданы:</strong> {proposalError}. Текст и
+              анализ сохранены, можно запустить анализ ещё раз.
+            </div>
+          )}
+
+          {summary && (
+            <div
+              style={{
+                marginTop: 16,
+                padding: 16,
+                border: "1px solid #ddd",
+                borderRadius: 8,
+                background: "#fafafa",
+                lineHeight: 1.7,
+              }}
+            >
+              <strong>
+                Создано предложений для вашего решения: {summary.createdTotal}
+              </strong>
+
+              {summary.createdTotal > 0 && (
+                <div>
+                  {Object.entries(summary.created)
+                    .map(
+                      ([category, count]) =>
+                        `${CATEGORY_LABELS[category] ?? category}: ${count}`
+                    )
+                    .join(" · ")}
+                </div>
+              )}
+
+              {summary.failed.length > 0 && (
+                <div style={{ color: "#cc0000" }}>
+                  Не удалось создать:{" "}
+                  {summary.failed
+                    .map(
+                      (item) =>
+                        `${CATEGORY_LABELS[item.category] ?? item.category} (${item.error})`
+                    )
+                    .join("; ")}
+                </div>
+              )}
+
+              {summary.skipped.length > 0 && (
+                <details style={{ marginTop: 8 }}>
+                  <summary>Пропущено: {summary.skipped.length}</summary>
+                  <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                    {summary.skipped.map((item, index) => (
+                      <li key={`${item.category}-${index}`}>
+                        {CATEGORY_LABELS[item.category] ?? item.category}:{" "}
+                        {item.text} — {SKIP_LABELS[item.reason] ?? item.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {summary.notMapped.facts +
+                summary.notMapped.relationships +
+                summary.notMapped.secrets +
+                summary.notMapped.openQuestions >
+                0 && (
+                <div style={{ color: "#666", fontSize: 14, marginTop: 8 }}>
+                  Только для просмотра (предложения для них пока не создаются):
+                  факты {summary.notMapped.facts}, отношения{" "}
+                  {summary.notMapped.relationships}, секреты{" "}
+                  {summary.notMapped.secrets}, открытые вопросы{" "}
+                  {summary.notMapped.openQuestions}.
+                </div>
+              )}
+
+              {summary.createdTotal > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <Link href={`/projects/${projectId}/proposals`}>
+                    Перейти к предложениям →
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
           <div
             style={{

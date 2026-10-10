@@ -167,6 +167,10 @@ model Project {
   // свободные правила проекта, попадают в Context Pack с P0
   projectRules String?
 
+  // исходный текст Story Bible: автор вставляет его на странице Story Bible
+  storyBibleText      String?
+  storyBibleUpdatedAt DateTime?
+
   books          Book[]
   characters     Character[]
   plotLines      PlotLine[]
