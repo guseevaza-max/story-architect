@@ -36,14 +36,21 @@ const sections: {
 type ProposalSummary = {
   created: Record<string, number>;
   createdTotal: number;
-  skipped: { category: string; text: string; reason: string }[];
+  skipped: {
+    category: string;
+    text: string;
+    reason: string;
+  }[];
   notMapped: {
     facts: number;
     relationships: number;
     secrets: number;
     openQuestions: number;
   };
-  failed: { category: string; error: string }[];
+  failed: {
+    category: string;
+    error: string;
+  }[];
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -63,15 +70,18 @@ const SKIP_LABELS: Record<string, string> = {
   duplicate_in_analysis: "повтор внутри анализа",
   unnamed: "безымянная фигура: нужно имя",
   empty: "пустая строка",
-  ambiguous_type: "тип неоднозначен (одно название как локация и фракция)",
-  state_not_location: "государство не создаётся как локация или фракция",
+  ambiguous_type:
+    "тип неоднозначен (одно название как локация и фракция)",
+  state_not_location:
+    "государство не создаётся как локация или фракция",
   state_not_supported:
     "государство: для него пока нет типа предложения, добавьте вручную",
   not_a_faction:
     "государственный орган или абстрактное понятие, не самостоятельная фракция",
   not_a_plot_line:
     "единичный факт или последствие, а не развивающаяся сюжетная линия",
-  single_fact: "единичный факт или последствие, не отдельная сущность",
+  single_fact:
+    "единичный факт или последствие, не отдельная сущность",
   low_confidence: "низкая уверенность AI в типе",
   unsupported_kind: "тип неоднозначен, нужно уточнение автора",
 };
@@ -84,19 +94,25 @@ export default function StoryBiblePage() {
   const [savedText, setSavedText] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">(
-    "idle"
-  );
+
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "error"
+  >("idle");
+
   const [saveError, setSaveError] = useState("");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [summary, setSummary] = useState<ProposalSummary | null>(null);
+
+  const [restoredAnalysis, setRestoredAnalysis] = useState(false);
+
   const [proposalError, setProposalError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Загрузка сохранённого текста при открытии страницы.
+  // Загружаем сохранённый текст Story Bible из базы данных.
   useEffect(() => {
     if (!projectId) return;
 
@@ -107,16 +123,22 @@ export default function StoryBiblePage() {
       setLoadError("");
 
       try {
-        const response = await fetch(`/api/projects/${projectId}/story-bible`);
+        const response = await fetch(
+          `/api/projects/${projectId}/story-bible`
+        );
+
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          throw new Error(data.error || "Не удалось загрузить сохранённый текст.");
+          throw new Error(
+            data.error || "Не удалось загрузить сохранённый текст."
+          );
         }
 
         if (cancelled) return;
 
-        const stored = typeof data.text === "string" ? data.text : "";
+        const stored =
+          typeof data.text === "string" ? data.text : "";
 
         setText(stored);
         setSavedText(stored);
@@ -144,31 +166,102 @@ export default function StoryBiblePage() {
     };
   }, [projectId, reloadKey]);
 
+  // Восстанавливаем последний анализ из браузера для этого проекта.
+  useEffect(() => {
+    if (!projectId) return;
+
+    try {
+      const key = `story-bible-analysis:${projectId}`;
+      const raw = window.localStorage.getItem(key);
+
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          result?: AnalysisResult | null;
+          summary?: ProposalSummary | null;
+        };
+
+        if (saved.result) {
+          setResult(saved.result);
+        }
+
+        if (saved.summary) {
+          setSummary(saved.summary);
+        }
+      }
+    } catch (restoreError) {
+      console.error(
+        "Story Bible analysis restore error:",
+        restoreError
+      );
+    } finally {
+      setRestoredAnalysis(true);
+    }
+  }, [projectId]);
+
+  // Сохраняем анализ после восстановления исходного состояния.
+  // Если новый анализ не удался, старый результат не удаляется.
+  useEffect(() => {
+    if (!projectId || !restoredAnalysis || (!result && !summary)) {
+      return;
+    }
+
+    try {
+      const key = `story-bible-analysis:${projectId}`;
+
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          result,
+          summary,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch (storageError) {
+      console.error(
+        "Story Bible analysis save error:",
+        storageError
+      );
+    }
+  }, [projectId, restoredAnalysis, result, summary]);
+
+  // Сохраняем текст Story Bible в базе данных.
   const saveText = useCallback(
     async (value: string): Promise<boolean> => {
       setSaveState("saving");
       setSaveError("");
 
       try {
-        const response = await fetch(`/api/projects/${projectId}/story-bible`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: value }),
-        });
+        const response = await fetch(
+          `/api/projects/${projectId}/story-bible`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ text: value }),
+          }
+        );
 
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          throw new Error(data.error || "Не удалось сохранить текст.");
+          throw new Error(
+            data.error || "Не удалось сохранить текст."
+          );
         }
 
         setSavedText(value);
-        setSavedAt(data.updatedAt ? new Date(data.updatedAt) : new Date());
+
+        setSavedAt(
+          data.updatedAt ? new Date(data.updatedAt) : new Date()
+        );
+
         setSaveState("idle");
 
         return true;
       } catch (saveFailure) {
         setSaveState("error");
+
         setSaveError(
           saveFailure instanceof Error
             ? saveFailure.message
@@ -183,10 +276,7 @@ export default function StoryBiblePage() {
 
   const hasUnsaved = loaded && text !== savedText;
 
-  // Автосохранение через 1,5 секунды после последнего изменения.
-  // Не запускается, пока идёт предыдущее сохранение, чтобы старая версия
-  // текста не затёрла новую. После ошибки повторяется только по кнопке
-  // «Сохранить».
+  // Автосохранение текста через 1,5 секунды после изменения.
   useEffect(() => {
     if (!hasUnsaved || saveState !== "idle") return;
 
@@ -197,7 +287,7 @@ export default function StoryBiblePage() {
     return () => clearTimeout(timer);
   }, [hasUnsaved, saveState, text, saveText]);
 
-  // Предупреждение браузера, если закрыть вкладку с несохранённым текстом.
+  // Предупреждаем о несохранённом тексте при закрытии страницы.
   useEffect(() => {
     if (!hasUnsaved && saveState !== "saving") return;
 
@@ -208,31 +298,47 @@ export default function StoryBiblePage() {
 
     window.addEventListener("beforeunload", warn);
 
-    return () => window.removeEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+    };
   }, [hasUnsaved, saveState]);
 
   function statusText(): { text: string; color: string } {
     if (loadError) {
-      return { text: `⚠️ ${loadError}`, color: "#cc0000" };
+      return {
+        text: `⚠️ ${loadError}`,
+        color: "#cc0000",
+      };
     }
 
     if (!loaded) {
-      return { text: "Загрузка сохранённого текста…", color: "#666" };
+      return {
+        text: "Загрузка сохранённого текста…",
+        color: "#666",
+      };
     }
 
     if (saveState === "saving") {
-      return { text: "Сохранение…", color: "#666" };
+      return {
+        text: "Сохранение…",
+        color: "#666",
+      };
     }
 
     if (saveState === "error") {
       return {
-        text: `⚠️ ${saveError || "Не удалось сохранить."} Текст остался на странице.`,
+        text: `⚠️ ${
+          saveError || "Не удалось сохранить."
+        } Текст остался на странице.`,
         color: "#cc0000",
       };
     }
 
     if (hasUnsaved) {
-      return { text: "Есть несохранённые изменения", color: "#8a5a00" };
+      return {
+        text: "Есть несохранённые изменения",
+        color: "#8a5a00",
+      };
     }
 
     return {
@@ -248,6 +354,7 @@ export default function StoryBiblePage() {
 
   const status = statusText();
 
+  // Запускаем анализ Story Bible.
   async function analyzeText() {
     if (!text.trim()) {
       setError("Сначала введите текст.");
@@ -267,13 +374,13 @@ export default function StoryBiblePage() {
     setSummary(null);
     setProposalError("");
 
-    // Сначала сохраняем текст: анализ не должен приводить к его потере.
+    // Сначала сохраняем текст, чтобы не потерять изменения.
     if (text !== savedText) {
       await saveText(text);
     }
 
     try {
-      // 1. Анализируем текст через AI
+      // 1. Анализируем текст через AI.
       const response = await fetch("/api/ai/analyze", {
         method: "POST",
         headers: {
@@ -291,33 +398,41 @@ export default function StoryBiblePage() {
 
       const analysis: AnalysisResult = data.result;
 
-      // 2. Показываем результат анализа сразу: он не должен пропасть,
-      //    даже если создание предложений завершится ошибкой.
+      // 2. Показываем результат сразу.
+      // Он останется доступен, даже если предложения не создадутся.
       setResult(analysis);
 
-      // 3. Создаём предложения для автора (Canon не меняется).
-      //    Каждая категория обрабатывается независимо на сервере.
+      // 3. Создаём предложения для решения автора.
+      // Canon автоматически не меняется.
       try {
         const proposalResponse = await fetch(
           `/api/projects/${projectId}/story-bible/proposals`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({ analysis }),
           }
         );
 
-        const proposalData = await proposalResponse.json().catch(() => ({}));
+        const proposalData = await proposalResponse
+          .json()
+          .catch(() => ({}));
 
         if (!proposalResponse.ok) {
           throw new Error(
-            proposalData.error || "Не удалось создать предложения."
+            proposalData.error ||
+              "Не удалось создать предложения."
           );
         }
 
         setSummary(proposalData as ProposalSummary);
       } catch (proposalFailure) {
-        console.error("Story Bible proposals error:", proposalFailure);
+        console.error(
+          "Story Bible proposals error:",
+          proposalFailure
+        );
 
         setProposalError(
           proposalFailure instanceof Error
@@ -325,12 +440,12 @@ export default function StoryBiblePage() {
             : "Не удалось создать предложения."
         );
       }
-    } catch (error) {
-      console.error("Story Bible error:", error);
+    } catch (analysisError) {
+      console.error("Story Bible error:", analysisError);
 
       setError(
-        error instanceof Error
-          ? error.message
+        analysisError instanceof Error
+          ? analysisError.message
           : "Не удалось выполнить запрос."
       );
     } finally {
@@ -388,7 +503,10 @@ export default function StoryBiblePage() {
         <span>{status.text}</span>
 
         {loadError && (
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+          >
             Повторить загрузку
           </button>
         )}
@@ -449,8 +567,9 @@ export default function StoryBiblePage() {
                 borderRadius: 8,
               }}
             >
-              <strong>Предложения не созданы:</strong> {proposalError}. Текст и
-              анализ сохранены, можно запустить анализ ещё раз.
+              <strong>Предложения не созданы:</strong>{" "}
+              {proposalError}. Текст и анализ сохранены, можно
+              запустить анализ ещё раз.
             </div>
           )}
 
@@ -466,7 +585,8 @@ export default function StoryBiblePage() {
               }}
             >
               <strong>
-                Создано предложений для вашего решения: {summary.createdTotal}
+                Создано предложений для вашего решения:{" "}
+                {summary.createdTotal}
               </strong>
 
               {summary.createdTotal > 0 && (
@@ -474,7 +594,9 @@ export default function StoryBiblePage() {
                   {Object.entries(summary.created)
                     .map(
                       ([category, count]) =>
-                        `${CATEGORY_LABELS[category] ?? category}: ${count}`
+                        `${
+                          CATEGORY_LABELS[category] ?? category
+                        }: ${count}`
                     )
                     .join(" · ")}
                 </div>
@@ -486,7 +608,10 @@ export default function StoryBiblePage() {
                   {summary.failed
                     .map(
                       (item) =>
-                        `${CATEGORY_LABELS[item.category] ?? item.category} (${item.error})`
+                        `${
+                          CATEGORY_LABELS[item.category] ??
+                          item.category
+                        } (${item.error})`
                     )
                     .join("; ")}
                 </div>
@@ -494,12 +619,22 @@ export default function StoryBiblePage() {
 
               {summary.skipped.length > 0 && (
                 <details style={{ marginTop: 8 }}>
-                  <summary>Пропущено: {summary.skipped.length}</summary>
-                  <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                  <summary>
+                    Пропущено: {summary.skipped.length}
+                  </summary>
+
+                  <ul
+                    style={{
+                      margin: "8px 0 0",
+                      paddingLeft: 20,
+                    }}
+                  >
                     {summary.skipped.map((item, index) => (
                       <li key={`${item.category}-${index}`}>
-                        {CATEGORY_LABELS[item.category] ?? item.category}:{" "}
-                        {item.text} — {SKIP_LABELS[item.reason] ?? item.reason}
+                        {CATEGORY_LABELS[item.category] ??
+                          item.category}
+                        : {item.text} —{" "}
+                        {SKIP_LABELS[item.reason] ?? item.reason}
                       </li>
                     ))}
                   </ul>
@@ -511,12 +646,18 @@ export default function StoryBiblePage() {
                 summary.notMapped.secrets +
                 summary.notMapped.openQuestions >
                 0 && (
-                <div style={{ color: "#666", fontSize: 14, marginTop: 8 }}>
-                  Только для просмотра (предложения для них пока не создаются):
-                  факты {summary.notMapped.facts}, отношения{" "}
-                  {summary.notMapped.relationships}, секреты{" "}
-                  {summary.notMapped.secrets}, открытые вопросы{" "}
-                  {summary.notMapped.openQuestions}.
+                <div
+                  style={{
+                    color: "#666",
+                    fontSize: 14,
+                    marginTop: 8,
+                  }}
+                >
+                  Только для просмотра (предложения для них пока
+                  не создаются): факты {summary.notMapped.facts},
+                  отношения {summary.notMapped.relationships},
+                  секреты {summary.notMapped.secrets}, открытые
+                  вопросы {summary.notMapped.openQuestions}.
                 </div>
               )}
 
