@@ -41,6 +41,11 @@ export const eventProposalSchema = z.object({
   consequences: z.string().optional(),
 });
 
+export const openQuestionProposalSchema = z.object({
+  question: z.string().min(1).max(2000),
+  answer: z.string().max(4000).optional(),
+});
+
 export const proposalPayloadSchema = z.discriminatedUnion("entityType", [
   z.object({
     entityType: z.literal("CHARACTER"),
@@ -61,6 +66,10 @@ export const proposalPayloadSchema = z.discriminatedUnion("entityType", [
   z.object({
     entityType: z.literal("EVENT"),
     data: eventProposalSchema,
+  }),
+  z.object({
+    entityType: z.literal("OPEN_QUESTION"),
+    data: openQuestionProposalSchema,
   }),
 ]);
 

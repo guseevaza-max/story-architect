@@ -19,7 +19,12 @@ import {
 } from "./proposal-state";
 
 import { proposalPayloadSchema } from "@/lib/schemas/proposal";
+import {
+  editedLoreStatement,
+  loreFactPayloadSchema,
+} from "@/lib/schemas/loreFact";
 import { planRelationshipMerge } from "./relationshipMerge";
+import { splitMemoryBySafety } from "./memorySafety";
 
 
 
@@ -1869,13 +1874,102 @@ export async function applyProposal(
 
        */
 
-      if (
+      /**
+         * =====================================================
+         * LORE FACT (факт из Lore Library)
+         * Обрабатывается отдельно от общих Canon proposals.
+         * =====================================================
+         */
+        if (proposal.entityType === "LORE_FACT") {
+          if (proposal.op !== "CREATE") {
+            throw new ProposalStateError(
+              `Операция ${proposal.op} не поддерживается для факта Lore Library`
+            );
+          }
 
-        proposal.entityType ===
+          const original = loreFactPayloadSchema.parse(proposal.payload);
 
-        "chapter_plan"
+          // EDIT_AND_ACCEPT меняет только утверждение: цитата и
+          // происхождение факта остаются исходными.
+          let factPayload = original;
 
-      ) {
+          if (action === "EDIT_AND_ACCEPT") {
+            const editedStatement = editedLoreStatement(editedPayload);
+
+            if (!editedStatement) {
+              throw new ProposalStateError(
+                "Для факта Lore Library нужно непустое утверждение"
+              );
+            }
+
+            factPayload = loreFactPayloadSchema.parse({
+              entityType: "LORE_FACT",
+              data: { ...original.data, statement: editedStatement },
+            });
+          }
+
+          // Идемпотентность: один Proposal порождает не более одного CanonFact.
+          const existingFact = await tx.canonFact.findFirst({
+            where: {
+              projectId: proposal.projectId,
+              sourceProposalId: proposal.id,
+            },
+            select: { id: true },
+          });
+
+          const fact =
+            existingFact ??
+            (await tx.canonFact.create({
+              data: {
+                projectId: proposal.projectId,
+                statement: factPayload.data.statement,
+                status: "CANON",
+                factSource: "AI_EXTRACTION",
+                confidence: factPayload.data.confidence,
+                sourceProposalId: proposal.id,
+                sourceAiRunId: proposal.aiRunId ?? null,
+              },
+              select: { id: true },
+            }));
+
+          const acceptedProposal = await tx.proposal.update({
+            where: { id: proposal.id },
+            data: {
+              status: transition.next,
+              entityId: fact.id,
+              editedPayload:
+                action === "EDIT_AND_ACCEPT"
+                  ? toInputJson(factPayload)
+                  : undefined,
+              reviewedAt: new Date(),
+              reviewedById: actor.userId,
+            },
+          });
+
+          await tx.changeLog.create({
+            data: {
+              projectId: proposal.projectId,
+              entityType: proposal.entityType,
+              entityId: fact.id,
+              op: proposal.op,
+              before: Prisma.JsonNull,
+              after: toInputJson(factPayload),
+              actorType: "AUTHOR",
+              actorId: actor.userId,
+              proposalId: proposal.id,
+              aiRunId: proposal.aiRunId,
+              chapterId: proposal.sourceChapterId,
+            },
+          });
+
+          return {
+            proposal: acceptedProposal,
+            canonEntityId: fact.id,
+            canonChanged: true,
+          };
+        }
+
+        if (proposal.entityType === "chapter_plan") {
 
         if (
 
@@ -2705,13 +2799,14 @@ export async function applyProposal(
 
 
 
-        const parsedMemory =
+        const fullMemory = parseMemoryUpdate(memoryPayload);
 
-          parseMemoryUpdate(
-
-            memoryPayload
-
-          );
+            // Достоверность пунктов. В структурированное состояние и в
+            // память для генераторов попадают только SAFE. UNCERTAIN и
+            // CONFLICT сохраняются отдельно (metadata.unconfirmed) для
+            // решения автора и не становятся подтверждённым Canon.
+            const memorySplit = splitMemoryBySafety(fullMemory);
+            const parsedMemory = memorySplit.confirmed;
 
 
 
@@ -3133,11 +3228,10 @@ export async function applyProposal(
 
 
 
-                    characterProposals:
-
-                      parsedMemory.characterProposals,
-
-                  }),
+                    characterProposals: parsedMemory.characterProposals,
+                unconfirmed: memorySplit.unconfirmed,
+                unconfirmedCount: memorySplit.unconfirmedCount,
+              }),
 
               },
 
@@ -5370,15 +5464,26 @@ export async function applyProposal(
 
 
 
-          canonEntityId =
+          canonEntityId = event.id;
+            break;
+          }
 
-            event.id;
+          case "OPEN_QUESTION": {
+            // Открытый вопрос по определению ещё не решён: он хранится
+            // как UNKNOWN (значение по умолчанию модели), и попадает в базу
+            // только после явного подтверждения автора.
+            const openQuestion = await tx.openQuestion.create({
+              data: {
+                projectId: proposal.projectId,
+                question: parsed.data.question,
+                answer: parsed.data.answer ?? null,
+                status: "UNKNOWN",
+              },
+            });
 
-
-
-          break;
-
-        }
+            canonEntityId = openQuestion.id;
+            break;
+          }
 
       }
 

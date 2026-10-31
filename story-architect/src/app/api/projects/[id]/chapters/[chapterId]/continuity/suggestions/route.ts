@@ -1,25 +1,29 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 
 const prisma = new PrismaClient();
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(
   request: Request,
   context: {
-    params: Promise<{
+params: Promise<{
       id: string;
       chapterId: string;
     }>;
   }
 ) {
-  try {
-    const session = await auth();
+    if (!hasOpenAIKey()) {
+    return NextResponse.json(
+      { error: "Провайдер OpenAI не настроен" },
+      { status: 500 }
+    );
+  }
+
+  const openai = getOpenAIClient();
+
+  try {    const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json(

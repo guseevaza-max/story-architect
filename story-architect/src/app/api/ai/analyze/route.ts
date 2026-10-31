@@ -1,10 +1,7 @@
-import { NextResponse } from "next/server";
-import OpenAI from "openai";
-import { auth } from "@/auth";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { getOpenAIClient } from "@/lib/ai/provider";
 
 const analysisSchema = {
   type: "object",
@@ -50,9 +47,7 @@ const analysisSchema = {
       type: "array",
       items: { type: "string" },
     },
-    // Структурированные кандидаты: по ним создаются предложения автору.
-    // Тип, основание из текста и уверенность позволяют отличать фракцию
-    // от госоргана, локацию от государства, сюжетную линию от факта.
+    // Структурированные кандидаты для предложений автору.
     candidates: {
       type: "array",
       items: {
@@ -138,11 +133,13 @@ export async function POST(request: Request) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const body = await request.json();
-
     const text = String(body.text ?? "").trim();
 
     if (!text) {
@@ -152,13 +149,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const openai = getOpenAIClient();
+
     const response = await openai.responses.create({
       model: "gpt-5.6-luna",
       input: [
         {
           role: "system",
-          content:
-            ANALYSIS_SYSTEM_PROMPT,
+          content: ANALYSIS_SYSTEM_PROMPT,
         },
         {
           role: "user",

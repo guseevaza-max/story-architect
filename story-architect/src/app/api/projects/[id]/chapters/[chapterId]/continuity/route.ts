@@ -1,13 +1,11 @@
+
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
+import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
 import { buildStoryState } from "@/lib/context/storyState";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 
 type ContinuityIssueFromAI = {
   severity: "HIGH" | "MEDIUM" | "LOW";
@@ -36,29 +34,19 @@ export async function POST(
   }
 ) {
   try {
-    // =====================================================
-    // 1. АВТОРИЗАЦИЯ
-    // =====================================================
-
+    // 1. Авторизация
     const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
+        { error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
     const { id: projectId, chapterId } = await params;
 
-    // =====================================================
-    // 2. ПРОЕКТ
-    // =====================================================
-
+    // 2. Проект
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
@@ -68,19 +56,12 @@ export async function POST(
 
     if (!project) {
       return NextResponse.json(
-        {
-          error: "Проект не найден.",
-        },
-        {
-          status: 404,
-        }
+        { error: "Проект не найден." },
+        { status: 404 }
       );
     }
 
-    // =====================================================
-    // 3. ГЛАВА
-    // =====================================================
-
+    // 3. Глава
     const chapter = await prisma.chapter.findFirst({
       where: {
         id: chapterId,
@@ -90,7 +71,6 @@ export async function POST(
       },
       include: {
         book: true,
-
         scenes: {
           orderBy: {
             order: "asc",
@@ -101,59 +81,36 @@ export async function POST(
 
     if (!chapter) {
       return NextResponse.json(
-        {
-          error: "Глава не найдена.",
-        },
-        {
-          status: 404,
-        }
+        { error: "Глава не найдена." },
+        { status: 404 }
       );
     }
 
-    // =====================================================
-    // 4. ПРОВЕРКА ЧЕРНОВИКА
-    // =====================================================
-
+    // 4. Проверка черновика
     if (!chapter.draftText?.trim()) {
       return NextResponse.json(
-        {
-          error: "У главы нет черновика для проверки.",
-        },
-        {
-          status: 400,
-        }
+        { error: "У главы нет черновика для проверки." },
+        { status: 400 }
       );
     }
 
-    // =====================================================
-    // 5. OPENAI KEY
-    // =====================================================
-
-    if (!process.env.OPENAI_API_KEY) {
+    // 5. Проверка AI-провайдера
+    if (!hasOpenAIKey()) {
       return NextResponse.json(
-        {
-          error: "OPENAI_API_KEY не настроен.",
-        },
-        {
-          status: 500,
-        }
+        { error: "Провайдер OpenAI не настроен" },
+        { status: 500 }
       );
     }
 
-    // =====================================================
-    // 6. ПЛАН ГЛАВЫ
-    // =====================================================
+    const openai = getOpenAIClient();
 
+    // 6. План главы
     const plan =
-      chapter.plan &&
-      typeof chapter.plan === "object"
+      chapter.plan && typeof chapter.plan === "object"
         ? JSON.stringify(chapter.plan, null, 2)
         : "План отсутствует.";
 
-    // =====================================================
-    // 7. ПЛАН СЦЕН
-    // =====================================================
-
+    // 7. План сцен
     const scenes = chapter.scenes
       .map((scene) => {
         const scenePlan = Array.isArray(scene.plan)
@@ -175,33 +132,24 @@ ${scene.plannedOutcome ?? ""}
       })
       .join("\n");
 
-    // =====================================================
-    // 8. SYSTEM PROMPT
-    // =====================================================
-
+    // 8. System prompt
     const systemPrompt = `
 Ты — Continuity Checker в системе Story Architect.
 
-Твоя задача — проверить черновик главы на внутреннюю
-непротиворечивость и соответствие утверждённому плану.
+Твоя задача — проверить черновик главы на внутреннюю непротиворечивость
+и соответствие утверждённому плану.
 
 Ты НЕ переписываешь текст.
-
 Ты НЕ исправляешь текст самостоятельно.
-
 Ты НЕ изменяешь Canon.
-
 Ты НЕ добавляешь новые факты.
-
 Ты только создаёшь отчёт для автора.
 
 Проверяй:
-
 1. Соответствие утверждённому плану главы.
 2. Соответствие плану сцен.
 3. Противоречия между сценами.
-4. Факты, персонажей, события или способности,
-   которые появились без основания.
+4. Факты, персонажей, события или способности, которые появились без основания.
 5. Нарушение запретов и ограничений плана.
 6. Логические противоречия внутри текста.
 7. Нарушение последовательности событий.
@@ -210,7 +158,6 @@ ${scene.plannedOutcome ?? ""}
 10. Другие существенные проблемы непрерывности.
 
 Также проверяй:
-
 - Timeline
 - World
 - Abilities
@@ -223,11 +170,9 @@ ${scene.plannedOutcome ?? ""}
 - Possessions
 
 Не считай обычные стилистические предпочтения ошибками.
-
 Не придумывай проблему, если для неё нет достаточных оснований.
 
 Каждая проблема должна содержать:
-
 severity
 type
 location
@@ -236,17 +181,13 @@ evidence
 recommendation
 
 severity:
-
 HIGH — существенная проблема.
-
 MEDIUM — проблема, которую желательно проверить или исправить.
-
 LOW — небольшая проблема или потенциальный вопрос.
 
 Если проблем нет — верни пустой массив issues.
 
 Верни ТОЛЬКО JSON:
-
 {
   "status": "PASS" | "WARN" | "FAIL",
   "issues": [
@@ -272,16 +213,20 @@ FAIL:
 есть существенные противоречия или нарушения.
 `;
 
-    // =====================================================
-    // 9. USER PROMPT
-    // =====================================================
-
+    // 9. User prompt
     const storyState = await buildStoryState({
       projectId: project.id,
       bookId: chapter.bookId,
       bookNumber: chapter.book.number,
       chapterNumber: chapter.number,
     });
+
+    // Только принцип: художественные предпочтения автора не являются фактами.
+    const authorBlock = await loadAuthorDirectionBlock(
+      project.id,
+      chapter.id,
+      "continuity"
+    );
 
     const userPrompt = `
 ПРОЕКТ:
@@ -304,19 +249,15 @@ ${scenes || "План сцен отсутствует."}
 
 ПОДТВЕРЖДЁННОЕ СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ
 (персонажи и отношения; проверь, не противоречит ли ему черновик):
-${storyState}
+${storyState}${authorBlock}
 
 ЧЕРНОВИК ГЛАВЫ:
 ${chapter.draftText}
 `;
 
-    // =====================================================
-    // 10. OPENAI
-    // =====================================================
-
+    // 10. OpenAI
     const response = await openai.responses.create({
       model: "gpt-5.6-luna",
-
       input: [
         {
           role: "system",
@@ -327,69 +268,45 @@ ${chapter.draftText}
           content: userPrompt,
         },
       ],
-
       text: {
         format: {
           type: "json_schema",
           name: "continuity_report",
           strict: true,
-
           schema: {
             type: "object",
-
             additionalProperties: false,
-
             properties: {
               status: {
                 type: "string",
-
-                enum: [
-                  "PASS",
-                  "WARN",
-                  "FAIL",
-                ],
+                enum: ["PASS", "WARN", "FAIL"],
               },
-
               issues: {
                 type: "array",
-
                 items: {
                   type: "object",
-
                   additionalProperties: false,
-
                   properties: {
                     severity: {
                       type: "string",
-
-                      enum: [
-                        "HIGH",
-                        "MEDIUM",
-                        "LOW",
-                      ],
+                      enum: ["HIGH", "MEDIUM", "LOW"],
                     },
-
                     type: {
                       type: "string",
                     },
-
                     location: {
                       type: "string",
                     },
-
                     problem: {
                       type: "string",
                     },
-
                     evidence: {
                       type: "string",
                     },
-
                     recommendation: {
                       type: "string",
                     },
                   },
-
                   required: [
                     "severity",
                     "type",
@@ -400,259 +317,157 @@ ${chapter.draftText}
                   ],
                 },
               },
-
               summary: {
                 type: "string",
               },
             },
-
-            required: [
-              "status",
-              "issues",
-              "summary",
-            ],
+            required: ["status", "issues", "summary"],
           },
         },
       },
     });
 
-    // =====================================================
-    // 11. ПОЛУЧАЕМ AI OUTPUT
-    // =====================================================
-
+    // 11. Получаем AI output
     const output = response.output_text?.trim();
 
     if (!output) {
       return NextResponse.json(
-        {
-          error: "AI не вернул отчёт проверки.",
-        },
-        {
-          status: 500,
-        }
+        { error: "AI не вернул отчёт проверки." },
+        { status: 500 }
       );
     }
 
-    // =====================================================
-    // 12. PARSE JSON
-    // =====================================================
-
+    // 12. Parse JSON
     let report: ContinuityReportFromAI;
 
     try {
       report = JSON.parse(output);
     } catch (error) {
-      console.error(
-        "Continuity JSON parse error:",
-        error
-      );
+      console.error("Continuity JSON parse error:", error);
 
       return NextResponse.json(
-        {
-          error: "AI вернул некорректный JSON отчёта.",
-        },
-        {
-          status: 500,
-        }
+        { error: "AI вернул некорректный JSON отчёта." },
+        { status: 500 }
       );
     }
 
-    // =====================================================
-    // 13. СОЗДАЁМ CONTINUITY REPORT
-    // =====================================================
-
+    // 13. Создаём continuity report
     let savedReport;
 
     try {
-      savedReport =
-        await prisma.continuityReport.create({
-          data: {
-            chapterId: chapter.id,
+      savedReport = await prisma.continuityReport.create({
+        data: {
+          chapterId: chapter.id,
+          level: 2,
+          summary: report.summary as Prisma.InputJsonValue,
+          issues: {
+            create: report.issues.map((issue) => {
+              let alertType: "ERROR" | "WARNING" | "OPPORTUNITY";
 
-            // 2 = семантическая AI-проверка
-            level: 2,
+              if (issue.severity === "HIGH") {
+                alertType = "ERROR";
+              } else if (issue.severity === "MEDIUM") {
+                alertType = "WARNING";
+              } else {
+                alertType = "WARNING";
+              }
 
-            summary:
-              report.summary as Prisma.InputJsonValue,
+              let priority:
+                | "CRITICAL"
+                | "IMPORTANT"
+                | "USEFUL"
+                | "OPTIONAL";
 
-            issues: {
-              create: report.issues.map(
-                (issue) => {
-                  let alertType:
-                    | "ERROR"
-                    | "WARNING"
-                    | "OPPORTUNITY";
+              if (issue.severity === "HIGH") {
+                priority = "CRITICAL";
+              } else if (issue.severity === "MEDIUM") {
+                priority = "IMPORTANT";
+              } else {
+                priority = "USEFUL";
+              }
 
-                  if (
-                    issue.severity === "HIGH"
-                  ) {
-                    alertType = "ERROR";
-                  } else if (
-                    issue.severity === "MEDIUM"
-                  ) {
-                    alertType = "WARNING";
-                  } else {
-                    alertType = "WARNING";
-                  }
-
-                  let priority:
-                    | "CRITICAL"
-                    | "IMPORTANT"
-                    | "USEFUL"
-                    | "OPTIONAL";
-
-                  if (
-                    issue.severity === "HIGH"
-                  ) {
-                    priority = "CRITICAL";
-                  } else if (
-                    issue.severity === "MEDIUM"
-                  ) {
-                    priority = "IMPORTANT";
-                  } else {
-                    priority = "USEFUL";
-                  }
-
-                  return {
-                    alertType,
-
-                    priority,
-
-                    category:
-                      issue.type,
-
-                    title:
-                      issue.problem,
-
-                    evidence:
-                      issue.evidence as Prisma.InputJsonValue,
-
-                    explanations:
-                      {
-                        recommendation:
-                          issue.recommendation,
-
-                        location:
-                          issue.location,
-                      } as Prisma.InputJsonValue,
-
-                    confidence: null,
-
-                    suggestedResolutions:
-                      {
-                        recommendation:
-                          issue.recommendation,
-                      } as Prisma.InputJsonValue,
-
-                    resolved: false,
-
-                    resolution: null,
-                  };
-                }
-              ),
-            },
+              return {
+                alertType,
+                priority,
+                category: issue.type,
+                title: issue.problem,
+                evidence: issue.evidence as Prisma.InputJsonValue,
+                explanations: {
+                  recommendation: issue.recommendation,
+                  location: issue.location,
+                } as Prisma.InputJsonValue,
+                confidence: null,
+                suggestedResolutions: {
+                  recommendation: issue.recommendation,
+                } as Prisma.InputJsonValue,
+                resolved: false,
+                resolution: null,
+              };
+            }),
           },
-
-          include: {
-            issues: true,
-          },
-        });
+        },
+        include: {
+          issues: true,
+        },
+      });
     } catch (error) {
-      console.error(
-        "Continuity report DB save error:",
-        error
-      );
+      console.error("Continuity report DB save error:", error);
 
       const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
+        error instanceof Error ? error.message : String(error);
 
       return NextResponse.json(
         {
           error:
             "AI проверку выполнил, но сохранить отчёт в базу не удалось.",
-
           details: message,
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
-    // =====================================================
-    // 14. МЕНЯЕМ СТАТУС ГЛАВЫ
-    // =====================================================
-
+    // 14. Меняем статус главы
     try {
       // Проверку можно запускать и для утверждённой главы,
       // но статус APPROVED / CANON она понижать не должна.
-      if (
-        chapter.status !== "APPROVED" &&
-        chapter.status !== "CANON"
-      ) {
+      if (chapter.status !== "APPROVED" && chapter.status !== "CANON") {
         await prisma.chapter.update({
           where: {
             id: chapter.id,
           },
-
           data: {
             status: "CHECKING",
           },
         });
       }
     } catch (error) {
-      console.error(
-        "Chapter status update error:",
-        error
-      );
-
+      console.error("Chapter status update error:", error);
       // Сам отчёт уже сохранён.
       // Поэтому не считаем всю операцию провальной.
     }
 
-    // =====================================================
-    // 15. ОТВЕТ
-    // =====================================================
-
+    // 15. Ответ
     return NextResponse.json({
       ok: true,
-
       report: {
         id: savedReport.id,
-
-        status:
-          report.status,
-
-        summary:
-          report.summary,
-
-        issues:
-          savedReport.issues,
+        status: report.status,
+        summary: report.summary,
+        issues: savedReport.issues,
       },
     });
   } catch (error) {
-    console.error(
-      "Continuity check error:",
-      error
-    );
+    console.error("Continuity check error:", error);
 
     const message =
-      error instanceof Error
-        ? error.message
-        : String(error);
+      error instanceof Error ? error.message : String(error);
 
     return NextResponse.json(
       {
-        error:
-          "Не удалось выполнить проверку непрерывности.",
-
+        error: "Не удалось выполнить проверку непрерывности.",
         details: message,
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

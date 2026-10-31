@@ -103,6 +103,24 @@ export default async function ProjectPage({
           gap: 16,
         }}
       >
+        {/* Lore Library */}
+        <Link
+          href={`/projects/${project.id}/lore`}
+          style={{
+            display: "block",
+            padding: 24,
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            textDecoration: "none",
+            color: "inherit",
+            background: "#fff",
+          }}
+        >
+          <h2>📚 Материалы мира</h2>
+          <p>Исходные заметки, технологии, локации, культура и история мира.</p>
+          <strong>Открыть библиотеку →</strong>
+        </Link>
+
         {/* Story Bible */}
         <Link
           href={`/projects/${project.id}/story-bible`}
@@ -310,6 +328,28 @@ export default async function ProjectPage({
           </p>
 
           <strong>Открыть таймлайн →</strong>
+        </Link>
+
+        {/* Референсы */}
+        <Link
+          href={`/projects/${project.id}/references`}
+          style={{
+            display: "block",
+            textDecoration: "none",
+            color: "inherit",
+            border: "1px solid #ddd",
+            borderRadius: 14,
+            padding: 24,
+            background: "#fff",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>🎨 Референсы</h2>
+
+          <p style={{ color: "#666", lineHeight: 1.6 }}>
+            Библиотека художественных приёмов, которые применяются при работе над главами.
+          </p>
+
+          <strong>Открыть референсы →</strong>
         </Link>
       </section>
     </main>

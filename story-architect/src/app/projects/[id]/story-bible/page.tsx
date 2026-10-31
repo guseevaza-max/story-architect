@@ -60,6 +60,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   worldRules: "Правила мира",
   events: "События",
   plotLines: "Сюжетные линии",
+  openQuestions: "Открытые вопросы",
   other: "Прочее",
 };
 
@@ -643,9 +644,7 @@ export default function StoryBiblePage() {
 
               {summary.notMapped.facts +
                 summary.notMapped.relationships +
-                summary.notMapped.secrets +
-                summary.notMapped.openQuestions >
-                0 && (
+                summary.notMapped.secrets > 0 && (
                 <div
                   style={{
                     color: "#666",
@@ -656,8 +655,7 @@ export default function StoryBiblePage() {
                   Только для просмотра (предложения для них пока
                   не создаются): факты {summary.notMapped.facts},
                   отношения {summary.notMapped.relationships},
-                  секреты {summary.notMapped.secrets}, открытые
-                  вопросы {summary.notMapped.openQuestions}.
+                  секреты {summary.notMapped.secrets}.
                 </div>
               )}
 

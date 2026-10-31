@@ -20,7 +20,10 @@
  *  - Если тип неоднозначен, предложение не создаётся, а причина показывается
  *    в списке «Пропущено».
  *
- * Не превращаются в предложения: facts, relationships, secrets, openQuestions.
+ * Открытые вопросы (openQuestions) → OPEN_QUESTION на обоих путях: это
+ * простые строки-вопросы, неоднозначности типа у них нет.
+ *
+ * Не превращаются в предложения: facts, relationships, secrets.
  */
 
 export type CandidateKind =
@@ -73,7 +76,8 @@ export type DraftEntityType =
   | "WORLD_ENTITY"
   | "WORLD_RULE"
   | "PLOT_LINE"
-  | "EVENT";
+  | "EVENT"
+  | "OPEN_QUESTION";
 
 export type DraftCategory =
   | "characters"
@@ -81,7 +85,8 @@ export type DraftCategory =
   | "factions"
   | "worldRules"
   | "events"
-  | "plotLines";
+  | "plotLines"
+  | "openQuestions";
 
 export type SkippedCategory = DraftCategory | "other";
 
@@ -159,6 +164,7 @@ export function emptyExistingNames(): ExistingNames {
     WORLD_RULE: new Set(),
     PLOT_LINE: new Set(),
     EVENT: new Set(),
+    OPEN_QUESTION: new Set(),
   };
 }
 
@@ -347,8 +353,38 @@ function notMappedCounts(analysis: AnalysisInput) {
     facts: analysis.facts?.length ?? 0,
     relationships: analysis.relationships?.length ?? 0,
     secrets: analysis.secrets?.length ?? 0,
-    openQuestions: analysis.openQuestions?.length ?? 0,
+    // Открытые вопросы теперь превращаются в предложения; поле оставлено
+    // для совместимости с уже сохранённой в браузере сводкой.
+    openQuestions: 0,
   };
+}
+
+function draftsFromOpenQuestions(
+  items: string[] | undefined,
+  collector: Collector
+) {
+  for (const raw of items ?? []) {
+    const question = raw.replace(/\s+/g, " ").trim();
+
+    if (!question) {
+      collector.skip("openQuestions", raw, "empty");
+      continue;
+    }
+
+    collector.add(
+      {
+        category: "openQuestions",
+        entityType: "OPEN_QUESTION",
+        name: question,
+        payload: {
+          entityType: "OPEN_QUESTION",
+          data: { question: clip(question, 2000) },
+        },
+        reason: "Открытый вопрос извлечён AI из текста Story Bible",
+      },
+      question
+    );
+  }
 }
 
 // ───────────────────────── путь 1: структурированные кандидаты ─────────────
@@ -857,6 +893,8 @@ export function buildProposalDrafts(
   } else {
     draftsFromLists(analysis, collector);
   }
+
+  draftsFromOpenQuestions(analysis.openQuestions, collector);
 
   return {
     drafts: collector.drafts,

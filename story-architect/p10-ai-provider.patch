@@ -1,0 +1,575 @@
+diff --git a/story-architect/.env.example b/story-architect/.env.example
+index ef399b3..84039c4 100644
+--- a/story-architect/.env.example
++++ b/story-architect/.env.example
+@@ -19,7 +19,7 @@ AUTH_URL="http://localhost:3000"
+ # ── OpenAI (используется текущими API-роутами) ───────────────
+ # Ключ ТОЛЬКО на backend. Нужен для Architect, Scene Planner,
+ # Writer, Continuity, Memory и анализа вселенной.
+-OPENAI_API_KEY=""
++OPEN# AI_API_KEY больше не используется: ключ читается только из OPENAI_API_KEY (см. выше)
+ 
+ # ── AI Provider Layer (Router → Provider → Model) ────────────
+ # Пока не подключён к роутам (lib/ai/provider.ts не используется).
+diff --git a/story-architect/README.md b/story-architect/README.md
+index 8f16256..9b78e5a 100644
+--- a/story-architect/README.md
++++ b/story-architect/README.md
+@@ -7,7 +7,7 @@
+ ## Запуск
+ 
+ ```bash
+-cp .env.example .env        # заполнить AI_API_KEY и AUTH_SECRET
++cp .env.example .env        # заполнить OPENAI_API_KEY и AUTH_SECRET
+ npm install
+ docker compose up -d db     # или указать свой DATABASE_URL (Supabase)
+ npm run db:migrate
+diff --git a/story-architect/src/app/api/ai/analyze/route.ts b/story-architect/src/app/api/ai/analyze/route.ts
+index 00bf637..4eaccaf 100644
+--- a/story-architect/src/app/api/ai/analyze/route.ts
++++ b/story-architect/src/app/api/ai/analyze/route.ts
+@@ -1,11 +1,7 @@
+ import { NextResponse } from "next/server";
+-import OpenAI from "openai";
++import { getOpenAIClient } from "@/lib/ai/provider";
+ import { auth } from "@/auth";
+ 
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
+-
+ const analysisSchema = {
+   type: "object",
+   additionalProperties: false,
+@@ -152,7 +148,7 @@ export async function POST(request: Request) {
+       );
+     }
+ 
+-    const response = await openai.responses.create({
++    const response = await getOpenAIClient().responses.create({
+       model: "gpt-5.6-luna",
+       input: [
+         {
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts
+index a45ad6a..a078686 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts
+@@ -1,5 +1,5 @@
+ import { NextResponse } from "next/server";
+-import OpenAI from "openai";
++import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ import {
+   PrismaClient,
+   AiRunStatus,
+@@ -13,10 +13,6 @@ import {
+ 
+ const prisma = new PrismaClient();
+ 
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
+-
+ export async function POST(
+   _request: Request,
+   {
+@@ -113,9 +109,9 @@ export async function POST(
+     // 5. OPENAI KEY
+     // =====================================================
+ 
+-    if (!process.env.OPENAI_API_KEY) {
++    if (!isOpenAIConfigured()) {
+       return NextResponse.json(
+-        { error: "OPENAI_API_KEY не настроен" },
++        { error: AI_NOT_CONFIGURED_MESSAGE },
+         { status: 500 }
+       );
+     }
+@@ -488,7 +484,7 @@ TASK
+     // =====================================================
+ 
+     const response =
+-      await openai.chat.completions.create({
++      await getOpenAIClient().chat.completions.create({
+         model: "gpt-5.6-luna",
+ 
+         messages: [
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts
+index c8dd729..dd0d4cc 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts
+@@ -1,14 +1,10 @@
+ import { NextResponse } from "next/server";
+-import OpenAI from "openai";
++import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ import { PrismaClient } from "@prisma/client";
+ import { auth } from "@/auth";
+ 
+ const prisma = new PrismaClient();
+ 
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
+-
+ type Selection = {
+   issueId: string;
+   problemTitle: string;
+@@ -137,12 +133,12 @@ export async function POST(
+     }
+ 
+     if (
+-      !process.env.OPENAI_API_KEY
++      !isOpenAIConfigured()
+     ) {
+       return NextResponse.json(
+         {
+           error:
+-            "OPENAI_API_KEY не настроен.",
++            AI_NOT_CONFIGURED_MESSAGE,
+         },
+         {
+           status: 500,
+@@ -265,7 +261,7 @@ ${chapter.draftText}
+ `;
+ 
+     const response =
+-      await openai.chat.completions.create({
++      await getOpenAIClient().chat.completions.create({
+         model: "gpt-5.6-luna",
+ 
+         messages: [
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts
+index b50d5a2..1e9f8be 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts
+@@ -3,11 +3,7 @@ import { Prisma } from "@prisma/client";
+ import { prisma } from "@/lib/db";
+ import { auth } from "@/auth";
+ import { buildStoryState } from "@/lib/context/storyState";
+-import OpenAI from "openai";
+-
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
++import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+ type ContinuityIssueFromAI = {
+   severity: "HIGH" | "MEDIUM" | "LOW";
+@@ -129,10 +125,10 @@ export async function POST(
+     // 5. OPENAI KEY
+     // =====================================================
+ 
+-    if (!process.env.OPENAI_API_KEY) {
++    if (!isOpenAIConfigured()) {
+       return NextResponse.json(
+         {
+-          error: "OPENAI_API_KEY не настроен.",
++          error: AI_NOT_CONFIGURED_MESSAGE,
+         },
+         {
+           status: 500,
+@@ -314,7 +310,7 @@ ${chapter.draftText}
+     // 10. OPENAI
+     // =====================================================
+ 
+-    const response = await openai.responses.create({
++    const response = await getOpenAIClient().responses.create({
+       model: "gpt-5.6-luna",
+ 
+       input: [
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts
+index 085538f..900f4a6 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts
+@@ -1,14 +1,10 @@
+ import { NextResponse } from "next/server";
+-import OpenAI from "openai";
++import { getOpenAIClient } from "@/lib/ai/provider";
+ import { PrismaClient } from "@prisma/client";
+ import { auth } from "@/auth";
+ 
+ const prisma = new PrismaClient();
+ 
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
+-
+ export async function POST(
+   request: Request,
+   context: {
+@@ -167,7 +163,7 @@ ${JSON.stringify(
+ `;
+ 
+     const response =
+-      await openai.chat.completions.create({
++      await getOpenAIClient().chat.completions.create({
+         model: "gpt-5.6-luna",
+ 
+         messages: [
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/memory/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/memory/route.ts
+index 9baca11..a18508a 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/memory/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/memory/route.ts
+@@ -10,7 +10,7 @@ import { auth } from "@/auth";
+ 
+ 
+ 
+-import OpenAI from "openai";
++import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+ 
+ 
+@@ -26,22 +26,6 @@ const prisma = new PrismaClient();
+ 
+ 
+ 
+-const openai = new OpenAI({
+-
+-
+-
+-  apiKey: process.env.OPENAI_API_KEY,
+-
+-
+-
+-});
+-
+-
+-
+-
+-
+-
+-
+ function toInputJson(
+ 
+ 
+@@ -574,7 +558,7 @@ export async function POST(
+ 
+ 
+ 
+-    if (!process.env.OPENAI_API_KEY) {
++    if (!isOpenAIConfigured()) {
+ 
+ 
+ 
+@@ -590,7 +574,7 @@ export async function POST(
+ 
+ 
+ 
+-            "OPENAI_API_KEY не настроен.",
++            AI_NOT_CONFIGURED_MESSAGE,
+ 
+ 
+ 
+@@ -850,7 +834,7 @@ CHARACTER:
+ 
+ 
+ 
+-      await openai.responses.create({
++      await getOpenAIClient().responses.create({
+ 
+ 
+ 
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts
+index 0216aeb..95f5f53 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts
+@@ -2,14 +2,10 @@ import { NextResponse } from "next/server";
+ import { PrismaClient } from "@prisma/client";
+ import { auth } from "@/auth";
+ import { buildStoryState } from "@/lib/context/storyState";
+-import OpenAI from "openai";
++import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+ const prisma = new PrismaClient();
+ 
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
+-
+ export async function POST(
+   request: Request,
+   {
+@@ -80,10 +76,10 @@ export async function POST(
+       );
+     }
+ 
+-    if (!process.env.OPENAI_API_KEY) {
++    if (!isOpenAIConfigured()) {
+       return NextResponse.json(
+         {
+-          error: "OPENAI_API_KEY не настроен.",
++          error: AI_NOT_CONFIGURED_MESSAGE,
+         },
+         { status: 500 }
+       );
+@@ -98,7 +94,7 @@ export async function POST(
+       chapterNumber: chapter.number,
+     });
+ 
+-    const response = await openai.responses.create({
++    const response = await getOpenAIClient().responses.create({
+       model: "gpt-5.6-luna",
+ 
+       input: [
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts
+index cc80328..b34f211 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts
+@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
+ import { prisma } from "@/lib/db";
+ import { auth } from "@/auth";
+ import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
+-import OpenAI from "openai";
+-
+-const openai = new OpenAI({
+-  apiKey: process.env.OPENAI_API_KEY,
+-});
++import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+ export async function POST(
+   request: Request,
+@@ -75,9 +71,9 @@ export async function POST(
+       );
+     }
+ 
+-    if (!process.env.OPENAI_API_KEY) {
++    if (!isOpenAIConfigured()) {
+       return NextResponse.json(
+-        { error: "OPENAI_API_KEY не настроен." },
++        { error: AI_NOT_CONFIGURED_MESSAGE },
+         { status: 500 }
+       );
+     }
+@@ -167,7 +163,7 @@ export async function POST(
+       plannedOutcome: scene.plannedOutcome,
+     }));
+ 
+-    const response = await openai.responses.create({
++    const response = await getOpenAIClient().responses.create({
+       model: "gpt-5.6-luna",
+       input: [
+         {
+diff --git a/story-architect/src/lib/ai/provider.ts b/story-architect/src/lib/ai/provider.ts
+index 9a5abe3..7bbd02b 100644
+--- a/story-architect/src/lib/ai/provider.ts
++++ b/story-architect/src/lib/ai/provider.ts
+@@ -1,5 +1,7 @@
+ import "server-only";
+ 
++import OpenAI from "openai";
++
+ /**
+  * AI Provider Layer (требование заказчика: AI Router → Provider → Model).
+  *
+@@ -8,6 +10,7 @@ import "server-only";
+  * Смена провайдера — правка .env, не правка кода.
+  *
+  * Ключ API читается только здесь и только на сервере (ТЗ п. 66).
++ * Единственное имя переменной окружения с ключом — OPENAI_API_KEY.
+  */
+ 
+ export type ModelClass = "FAST" | "STRONG" | "REASONING";
+@@ -46,6 +49,44 @@ function env(name: string, fallback = ""): string {
+   return process.env[name] ?? fallback;
+ }
+ 
++/** Сообщение, когда ключ не задан. Маршруты берут его отсюда. */
++export const AI_NOT_CONFIGURED_MESSAGE = "OPENAI_API_KEY не настроен.";
++
++/** Ключ API или undefined, если он не задан или состоит из пробелов. */
++function readApiKey(): string | undefined {
++  const key = process.env.OPENAI_API_KEY?.trim();
++  return key ? key : undefined;
++}
++
++/** Настроен ли ключ. Маршруты проверяют это, не читая окружение сами. */
++export function isOpenAIConfigured(): boolean {
++  return readApiKey() !== undefined;
++}
++
++let cachedClient: OpenAI | null = null;
++let cachedClientKey: string | null = null;
++
++/**
++ * Единый клиент OpenAI для всех серверных маршрутов.
++ * Создаётся лениво при первом вызове и переиспользуется; если ключ в
++ * окружении сменился (например, при перезапуске dev-сервера), создаётся
++ * новый клиент. Без ключа бросает AiProviderError.
++ */
++export function getOpenAIClient(): OpenAI {
++  const apiKey = readApiKey();
++
++  if (!apiKey) {
++    throw new AiProviderError(AI_NOT_CONFIGURED_MESSAGE);
++  }
++
++  if (!cachedClient || cachedClientKey !== apiKey) {
++    cachedClient = new OpenAI({ apiKey });
++    cachedClientKey = apiKey;
++  }
++
++  return cachedClient;
++}
++
+ function modelConfig(cls: ModelClass): ModelConfig {
+   const map: Record<ModelClass, ModelConfig> = {
+     FAST: {
+@@ -99,10 +140,10 @@ export async function complete(
+     return mockComplete(req, cfg, started);
+   }
+ 
+-  const apiKey = env("AI_API_KEY");
++  const apiKey = readApiKey();
+   if (!apiKey) {
+     throw new AiProviderError(
+-      "AI_API_KEY не задан. Укажите ключ в .env или включите AI_MOCK=true."
++      `${AI_NOT_CONFIGURED_MESSAGE} Укажите ключ в .env или включите AI_MOCK=true.`
+     );
+   }
+   if (!cfg.model) {
+@@ -185,7 +226,7 @@ function mockComplete(
+ ): CompletionResult {
+   const text = req.jsonSchema
+     ? JSON.stringify({ __mock: true, schema: req.jsonSchema.name })
+-    : "[MOCK] Ответ заглушки. Установите AI_API_KEY для реальной генерации.";
++    : "[MOCK] Ответ заглушки. Установите OPENAI_API_KEY для реальной генерации.";
+   return {
+     text,
+     model: cfg.model || `mock-${req.modelClass.toLowerCase()}`,
+diff --git a/story-architect/tests/ai-provider.test.ts b/story-architect/tests/ai-provider.test.ts
+new file mode 100644
+index 0000000..2199faf
+--- /dev/null
++++ b/story-architect/tests/ai-provider.test.ts
+@@ -0,0 +1,78 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++// В тестах нет среды Next.js: пакет server-only заменяем пустым модулем.
++vi.mock("server-only", () => ({}));
++
++import {
++  AI_NOT_CONFIGURED_MESSAGE,
++  AiProviderError,
++  getOpenAIClient,
++  isOpenAIConfigured,
++} from "../src/lib/ai/provider";
++
++const saved = {
++  openai: process.env.OPENAI_API_KEY,
++  legacy: process.env.AI_API_KEY,
++};
++
++function restore(name: string, value: string | undefined) {
++  if (value === undefined) delete process.env[name];
++  else process.env[name] = value;
++}
++
++beforeEach(() => {
++  delete process.env.OPENAI_API_KEY;
++  delete process.env.AI_API_KEY;
++});
++
++afterEach(() => {
++  restore("OPENAI_API_KEY", saved.openai);
++  restore("AI_API_KEY", saved.legacy);
++});
++
++describe("getOpenAIClient / isOpenAIConfigured", () => {
++  it("без ключа клиент не создаётся, а ошибка понятна", () => {
++    expect(isOpenAIConfigured()).toBe(false);
++    expect(() => getOpenAIClient()).toThrow(AiProviderError);
++    expect(() => getOpenAIClient()).toThrow(AI_NOT_CONFIGURED_MESSAGE);
++  });
++
++  it("пустой ключ и ключ из пробелов считаются незаданными", () => {
++    process.env.OPENAI_API_KEY = "";
++    expect(isOpenAIConfigured()).toBe(false);
++
++    process.env.OPENAI_API_KEY = "   ";
++    expect(isOpenAIConfigured()).toBe(false);
++    expect(() => getOpenAIClient()).toThrow(AiProviderError);
++  });
++
++  it("единственное имя переменной — OPENAI_API_KEY: AI_API_KEY не читается", () => {
++    process.env.AI_API_KEY = "sk-test-legacy-key-000000";
++    expect(isOpenAIConfigured()).toBe(false);
++    expect(() => getOpenAIClient()).toThrow(AiProviderError);
++  });
++
++  it("с ключом возвращает клиент с нужными методами", () => {
++    process.env.OPENAI_API_KEY = "sk-test-key-aaaaaaaa";
++    const client = getOpenAIClient();
++
++    expect(isOpenAIConfigured()).toBe(true);
++    expect(typeof client.responses.create).toBe("function");
++    expect(typeof client.chat.completions.create).toBe("function");
++  });
++
++  it("клиент переиспользуется, пока ключ не изменился", () => {
++    process.env.OPENAI_API_KEY = "sk-test-key-aaaaaaaa";
++    expect(getOpenAIClient()).toBe(getOpenAIClient());
++  });
++
++  it("при смене ключа создаётся новый клиент", () => {
++    process.env.OPENAI_API_KEY = "sk-test-key-aaaaaaaa";
++    const first = getOpenAIClient();
++
++    process.env.OPENAI_API_KEY = "sk-test-key-bbbbbbbb";
++    const second = getOpenAIClient();
++
++    expect(second).not.toBe(first);
++  });
++});
+diff --git a/story-architect/tests/ai-routes-use-provider.test.ts b/story-architect/tests/ai-routes-use-provider.test.ts
+new file mode 100644
+index 0000000..123b162
+--- /dev/null
++++ b/story-architect/tests/ai-routes-use-provider.test.ts
+@@ -0,0 +1,48 @@
++import { readdirSync, readFileSync, statSync } from "node:fs";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++
++function walk(dir: string): string[] {
++  return readdirSync(dir).flatMap((name) => {
++    const full = join(dir, name);
++    return statSync(full).isDirectory() ? walk(full) : [full];
++  });
++}
++
++const apiFiles = walk(join("src", "app", "api")).filter((f) =>
++  /route\.tsx?$/.test(f)
++);
++
++// Маршруты, которые обращаются к модели.
++const aiRoutes = apiFiles.filter((f) => {
++  const text = readFileSync(f, "utf8");
++  return /\.responses\.create\(|\.chat\.completions\.create\(/.test(text);
++});
++
++describe("AI-маршруты работают только через слой провайдера", () => {
++  it("найдено не меньше восьми AI-маршрутов (проверка не пустая)", () => {
++    expect(aiRoutes.length).toBeGreaterThanOrEqual(8);
++  });
++
++  it("каждый подключает клиент из lib/ai/provider", () => {
++    const missing = aiRoutes.filter(
++      (f) => !readFileSync(f, "utf8").includes("@/lib/ai/provider")
++    );
++    expect(missing).toEqual([]);
++  });
++
++  it("ни один не создаёт клиент и не импортирует SDK напрямую", () => {
++    const offenders = aiRoutes.filter((f) => {
++      const text = readFileSync(f, "utf8");
++      return /new OpenAI\(/.test(text) || /from\s+["']openai["']/.test(text);
++    });
++    expect(offenders).toEqual([]);
++  });
++
++  it("ни один не читает переменные окружения напрямую", () => {
++    const offenders = aiRoutes.filter((f) =>
++      /process\.env/.test(readFileSync(f, "utf8"))
++    );
++    expect(offenders).toEqual([]);
++  });
++});

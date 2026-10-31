@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import {
+  LORE_FACT_CATEGORY_LABELS,
+  type LoreFactCategory,
+} from "@/lib/schemas/loreFact";
 
 type ChapterPlan = {
   chapterPurpose?: string;
@@ -48,6 +52,18 @@ type Proposal = {
       fears?: string;
       beliefs?: string;
       values?: string;
+      question?: string;
+      answer?: string;
+      statement?: string;
+      cause?: string;
+      consequences?: string;
+      inWorldDate?: string;
+      type?: string;
+      evidenceQuote?: string;
+      confidence?: number;
+      category?: string;
+      ambiguity?: string | null;
+      source?: { materialTitle?: string };
     };
 
     chapterPurpose?: string;
@@ -962,8 +978,7 @@ export default function ProposalsPage() {
                               "0 0 12px",
                           }}
                         >
-                          {data.name ||
-                            "Без названия"}
+                          {data.name || data.question || data.statement || "Без названия"}
                         </h2>
 
                         {data.description && (
@@ -979,6 +994,91 @@ export default function ProposalsPage() {
                               data.description
                             }
                           </p>
+                        )}
+
+                        {data.type && (
+                          <p>
+                            <strong>Тип:</strong> {data.type}
+                          </p>
+                        )}
+
+                        {data.statement && proposal.entityType !== "LORE_FACT" && (
+                          <p>
+                            <strong>Формулировка:</strong>{" "}
+                            {data.statement}
+                          </p>
+                        )}
+
+                        {data.inWorldDate && (
+                          <p>
+                            <strong>Дата в мире:</strong>{" "}
+                            {data.inWorldDate}
+                          </p>
+                        )}
+
+                        {data.cause && (
+                          <p>
+                            <strong>Причина:</strong> {data.cause}
+                          </p>
+                        )}
+
+                        {data.consequences && (
+                          <p>
+                            <strong>Последствия:</strong>{" "}
+                            {data.consequences}
+                          </p>
+                        )}
+
+                        {data.answer && (
+                          <p>
+                            <strong>Ответ:</strong> {data.answer}
+                          </p>
+                        )}
+
+                        {proposal.entityType === "LORE_FACT" && (
+                          <div style={{ marginTop: 8 }}>
+                            {data.source?.materialTitle && (
+                              <p>
+                                <strong>Материал:</strong>{" "}
+                                {data.source.materialTitle}
+                              </p>
+                            )}
+
+                            {data.evidenceQuote && (
+                              <blockquote
+                                style={{
+                                  margin: "8px 0",
+                                  padding: "8px 12px",
+                                  borderLeft: "4px solid #d9c58b",
+                                  background: "#fffdf5",
+                                  whiteSpace: "pre-wrap",
+                                }}
+                              >
+                                «{data.evidenceQuote}»
+                              </blockquote>
+                            )}
+
+                            <p>
+                              <strong>Уверенность:</strong>{" "}
+                              {typeof data.confidence === "number"
+                                ? `${Math.round(data.confidence * 100)}%`
+                                : "не указана"}
+                              {data.category
+                                ? ` · Категория: ${
+                                    LORE_FACT_CATEGORY_LABELS[
+                                      data.category as LoreFactCategory
+                                    ] ?? data.category
+                                  }`
+                                : ""}
+                            </p>
+
+                            {data.ambiguity && (
+                              <p style={{ color: "#8a5a00" }}>
+                                <strong>Неоднозначность:</strong>{" "}
+                                {data.ambiguity}
+                              </p>
+                            )}
+                          </div>
                         )}
 
                         {data.role && (

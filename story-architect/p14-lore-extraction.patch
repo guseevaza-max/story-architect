@@ -1,0 +1,2022 @@
+diff --git a/story-architect/scripts/integrate-lore-extract.mjs b/story-architect/scripts/integrate-lore-extract.mjs
+new file mode 100644
+index 0000000..9422193
+--- /dev/null
++++ b/story-architect/scripts/integrate-lore-extract.mjs
+@@ -0,0 +1,78 @@
++#!/usr/bin/env node
++/**
++ * Добавляет кнопку «Извлечь факты» в интерфейс Lore Library
++ * (src/app/projects/[id]/lore/LoreLibrary.tsx).
++ *
++ * Скрипт ищет в файле кнопку «Удалить» и вставляет перед ней компонент
++ * <ExtractFactsButton />, определяя имена переменных по самому файлу.
++ * Если структура файла другая, скрипт НИЧЕГО не меняет и объясняет, что
++ * нужно сделать.
++ *
++ *   node scripts/integrate-lore-extract.mjs --check   # только проверка
++ *   node scripts/integrate-lore-extract.mjs           # внести изменения
++ *
++ * Копия исходного файла сохраняется в .lore-extract-backup/.
++ */
++import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { dirname, join } from "node:path";
++
++const checkOnly = process.argv.includes("--check");
++const rel = join("src", "app", "projects", "[id]", "lore", "LoreLibrary.tsx");
++const path = join(process.cwd(), rel);
++
++function fail(message) {
++  console.log(`✗ ${message}`);
++  process.exit(1);
++}
++
++if (!existsSync(path)) fail(`Не найден файл ${rel}`);
++if (!existsSync(join(process.cwd(), "src", "app", "projects", "[id]", "lore", "ExtractFactsButton.tsx"))) {
++  fail("Сначала добавьте файл ExtractFactsButton.tsx (часть патча).");
++}
++
++const text = readFileSync(path, "utf8");
++
++if (text.includes("ExtractFactsButton")) {
++  console.log("✓ Кнопка уже добавлена, ничего не делаю.");
++  process.exit(0);
++}
++
++// Переменная материала: key={material.id}
++const keyMatch = /key=\{\s*(\w+)\.id\s*\}/.exec(text);
++if (!keyMatch) fail("Не нашёл элемент списка с key={…id}: не могу определить переменную материала.");
++const item = keyMatch[1];
++
++// Идентификатор проекта: проп или переменная projectId
++if (!/\bprojectId\b/.test(text)) fail("Не нашёл переменную projectId в LoreLibrary.tsx.");
++
++// Кнопка «Удалить»
++const deleteButton = /<button\b[^>]*>(?:(?!<\/button>)[\s\S])*?Удалить(?:(?!<\/button>)[\s\S])*?<\/button>/.exec(text);
++if (!deleteButton) fail("Не нашёл кнопку «Удалить»: вставьте <ExtractFactsButton projectId={projectId} materialId={" + item + ".id} /> рядом с действиями материала вручную.");
++
++const usage = `<ExtractFactsButton projectId={projectId} materialId={${item}.id} />\n`;
++let next = text.slice(0, deleteButton.index) + usage + text.slice(deleteButton.index);
++
++// Импорт после последнего import
++const imports = [...next.matchAll(/^import .*;$/gm)];
++const importLine = 'import ExtractFactsButton from "./ExtractFactsButton";';
++if (imports.length > 0) {
++  const last = imports[imports.length - 1];
++  const at = last.index + last[0].length;
++  next = next.slice(0, at) + "\n" + importLine + next.slice(at);
++} else {
++  next = next.replace(/^("use client";\s*)/, `$1\n${importLine}\n`);
++}
++
++console.log(`✓ Найдено: материал «${item}», кнопка «Удалить». Вставка перед ней.`);
++
++if (checkOnly) {
++  console.log("Режим проверки: файл не изменён.");
++  process.exit(0);
++}
++
++const backup = join(process.cwd(), ".lore-extract-backup", rel);
++mkdirSync(dirname(backup), { recursive: true });
++copyFileSync(path, backup);
++writeFileSync(path, next, "utf8");
++
++console.log("Готово. Копия исходного файла: .lore-extract-backup/");
+diff --git a/story-architect/src/app/api/projects/[id]/lore/[materialId]/extract/route.ts b/story-architect/src/app/api/projects/[id]/lore/[materialId]/extract/route.ts
+new file mode 100644
+index 0000000..f709180
+--- /dev/null
++++ b/story-architect/src/app/api/projects/[id]/lore/[materialId]/extract/route.ts
+@@ -0,0 +1,220 @@
++import { NextResponse } from "next/server";
++import type { Prisma } from "@prisma/client";
++import { auth } from "@/auth";
++import { AiProviderError, complete, redact } from "@/lib/ai/provider";
++import { prisma } from "@/lib/db";
++import {
++  EXTRACTION_JSON_SCHEMA,
++  buildExtractionMessages,
++  normalizeStatement,
++  parseExtractionResponse,
++  prepareSource,
++  selectFacts,
++} from "@/lib/lore/extraction";
++import {
++  loreFactPayloadSchema,
++  type LoreFactData,
++} from "@/lib/schemas/loreFact";
++
++type RouteContext = {
++  params: Promise<{ id: string; materialId: string }>;
++};
++
++/** Берёт первое непустое строковое поле из списка возможных имён. */
++function pickString(
++  record: Record<string, unknown>,
++  names: readonly string[]
++): string {
++  for (const name of names) {
++    const value = record[name];
++    if (typeof value === "string" && value.trim()) return value;
++  }
++
++  return "";
++}
++
++function payloadMaterialId(payload: unknown): string | null {
++  const data = (payload as { data?: { source?: { materialId?: unknown } } } | null)
++    ?.data;
++  const id = data?.source?.materialId;
++
++  return typeof id === "string" ? id : null;
++}
++
++function payloadStatement(payload: unknown): string | null {
++  const statement = (payload as { data?: { statement?: unknown } } | null)?.data
++    ?.statement;
++
++  return typeof statement === "string" ? statement : null;
++}
++
++/**
++ * Извлекает факты из материала Lore Library и кладёт их в очередь
++ * предложений автору (Proposal LORE_FACT, PENDING). Canon не изменяется.
++ */
++export async function POST(_request: Request, { params }: RouteContext) {
++  try {
++    const session = await auth();
++
++    if (!session?.user?.id) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++
++    const { id, materialId } = await params;
++
++    const project = await prisma.project.findFirst({
++      where: { id, userId: session.user.id },
++      select: { id: true },
++    });
++
++    if (!project) {
++      return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
++    }
++
++    // Материал берём из базы и только внутри этого проекта.
++    const material = (await prisma.loreMaterial.findFirst({
++      where: { id: materialId, projectId: project.id },
++    })) as Record<string, unknown> | null;
++
++    if (!material) {
++      return NextResponse.json({ error: "Материал не найден" }, { status: 404 });
++    }
++
++    const title = pickString(material, ["title", "name"]).slice(0, 300);
++    const source = prepareSource(pickString(material, ["content", "text", "body"]));
++
++    if (!source.text) {
++      return NextResponse.json(
++        { error: "Материал пуст: извлекать нечего." },
++        { status: 400 }
++      );
++    }
++
++    let completion;
++
++    try {
++      completion = await complete({
++        modelClass: "STRONG",
++        temperature: 0.1,
++        maxTokens: 6000,
++        messages: buildExtractionMessages(title, source.text),
++        jsonSchema: EXTRACTION_JSON_SCHEMA as unknown as {
++          name: string;
++          schema: Record<string, unknown>;
++        },
++      });
++    } catch (error) {
++      console.error("Lore extraction AI error:", error);
++
++      return NextResponse.json(
++        {
++          error:
++            error instanceof AiProviderError
++              ? `Ошибка AI-провайдера: ${redact(error.message)}`
++              : "Не удалось обратиться к AI-провайдеру.",
++        },
++        { status: error instanceof AiProviderError && !error.status ? 503 : 502 }
++      );
++    }
++
++    const parsed = parseExtractionResponse(completion.text);
++
++    if (!parsed.ok) {
++      return NextResponse.json({ error: parsed.error }, { status: 502 });
++    }
++
++    // Что уже есть: ожидающие и отклонённые предложения этого материала
++    // и факты, принятые в Canon проекта.
++    const [loreProposals, canonFacts] = await Promise.all([
++      prisma.proposal.findMany({
++        where: {
++          projectId: project.id,
++          entityType: "LORE_FACT",
++          status: { in: ["PENDING", "REJECTED"] },
++        },
++        select: { status: true, payload: true },
++        take: 5000,
++      }),
++      prisma.canonFact.findMany({
++        where: { projectId: project.id, status: "CANON" },
++        select: { statement: true },
++        take: 10000,
++      }),
++    ]);
++
++    const pending = new Set<string>();
++    const rejected = new Set<string>();
++
++    for (const proposal of loreProposals) {
++      if (payloadMaterialId(proposal.payload) !== material.id) continue;
++
++      const statement = payloadStatement(proposal.payload);
++      if (!statement) continue;
++
++      (proposal.status === "REJECTED" ? rejected : pending).add(
++        normalizeStatement(statement)
++      );
++    }
++
++    const canon = new Set(
++      canonFacts.map((fact) => normalizeStatement(fact.statement))
++    );
++
++    const { accepted, skipped } = selectFacts(parsed.facts, source.text, {
++      pending,
++      rejected,
++      canon,
++    });
++
++    const payloads = accepted.map((fact) => {
++      const data: LoreFactData = {
++        statement: fact.statement,
++        evidenceQuote: fact.evidenceQuote,
++        confidence: fact.confidence,
++        category: fact.category,
++        ambiguity: fact.ambiguity,
++        source: {
++          type: "LORE_MATERIAL",
++          materialId: String(material.id),
++          materialTitle: title || "Без названия",
++        },
++      };
++
++      return loreFactPayloadSchema.parse({ entityType: "LORE_FACT", data });
++    });
++
++    if (payloads.length > 0) {
++      await prisma.$transaction(
++        payloads.map((payload) =>
++          prisma.proposal.create({
++            data: {
++              projectId: project.id,
++              entityType: "LORE_FACT",
++              op: "CREATE",
++              payload: payload as unknown as Prisma.InputJsonValue,
++              reason: `Факт извлечён AI из материала Lore Library «${title || "Без названия"}»`,
++              safety: "UNCERTAIN",
++              status: "PENDING",
++            },
++          })
++        )
++      );
++    }
++
++    return NextResponse.json({
++      ok: true,
++      created: payloads.length,
++      skipped,
++      truncated: source.truncated,
++      invalidItems: parsed.invalidItems,
++      model: completion.model,
++    });
++  } catch (error) {
++    console.error("Lore extraction error:", error);
++
++    return NextResponse.json(
++      { error: "Не удалось извлечь факты." },
++      { status: 500 }
++    );
++  }
++}
+diff --git a/story-architect/src/app/projects/[id]/lore/ExtractFactsButton.tsx b/story-architect/src/app/projects/[id]/lore/ExtractFactsButton.tsx
+new file mode 100644
+index 0000000..545ac9c
+--- /dev/null
++++ b/story-architect/src/app/projects/[id]/lore/ExtractFactsButton.tsx
+@@ -0,0 +1,114 @@
++"use client";
++
++import Link from "next/link";
++import { useState } from "react";
++
++type SkippedFact = { statement: string; reason: string };
++
++type Result = {
++  created: number;
++  skipped: SkippedFact[];
++  truncated: boolean;
++  invalidItems: number;
++};
++
++const REASONS: Record<string, string> = {
++  empty_statement: "пустое утверждение",
++  quote_not_found: "цитата не найдена в тексте",
++  duplicate_in_response: "повтор в ответе AI",
++  duplicate_pending: "уже ждёт вашего решения",
++  previously_rejected: "ранее отклонено вами",
++  already_canon: "уже есть в Canon",
++  limit_exceeded: "превышен лимит фактов",
++};
++
++/**
++ * Кнопка «Извлечь факты» для материала Lore Library.
++ * Факты попадают в очередь предложений, Canon не изменяется.
++ */
++export default function ExtractFactsButton({
++  projectId,
++  materialId,
++}: {
++  projectId: string;
++  materialId: string;
++}) {
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState("");
++  const [result, setResult] = useState<Result | null>(null);
++
++  async function extract() {
++    setLoading(true);
++    setError("");
++    setResult(null);
++
++    try {
++      const response = await fetch(
++        `/api/projects/${projectId}/lore/${materialId}/extract`,
++        { method: "POST" }
++      );
++
++      const data = await response.json().catch(() => ({}));
++
++      if (!response.ok) {
++        throw new Error(data.error || "Не удалось извлечь факты.");
++      }
++
++      setResult({
++        created: Number(data.created ?? 0),
++        skipped: Array.isArray(data.skipped) ? data.skipped : [],
++        truncated: Boolean(data.truncated),
++        invalidItems: Number(data.invalidItems ?? 0),
++      });
++    } catch (failure) {
++      setError(
++        failure instanceof Error ? failure.message : "Не удалось извлечь факты."
++      );
++    } finally {
++      setLoading(false);
++    }
++  }
++
++  return (
++    <div style={{ display: "inline-block", verticalAlign: "top" }}>
++      <button type="button" onClick={() => void extract()} disabled={loading}>
++        {loading ? "Извлечение…" : "Извлечь факты"}
++      </button>
++
++      {error && (
++        <div style={{ color: "#991b1b", marginTop: 8, maxWidth: 420 }}>
++          ⚠️ {error}
++        </div>
++      )}
++
++      {result && (
++        <div style={{ marginTop: 8, maxWidth: 420, lineHeight: 1.5, fontSize: 14 }}>
++          <strong>Предложено фактов: {result.created}</strong>{" "}
++          {result.created > 0 && (
++            <Link href={`/projects/${projectId}/proposals`}>К предложениям →</Link>
++          )}
++
++          {result.truncated && (
++            <div style={{ color: "#8a5a00" }}>
++              Материал длинный: обработано только начало текста.
++            </div>
++          )}
++
++          {result.skipped.length > 0 && (
++            <details>
++              <summary>Пропущено: {result.skipped.length}</summary>
++              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
++                {result.skipped.map((item, index) => (
++                  <li key={index}>
++                    {item.statement || "(без текста)"} —{" "}
++                    {REASONS[item.reason] ?? item.reason}
++                  </li>
++                ))}
++              </ul>
++            </details>
++          )}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/story-architect/src/app/projects/[id]/proposals/page.tsx b/story-architect/src/app/projects/[id]/proposals/page.tsx
+index 76932a4..82eb807 100644
+--- a/story-architect/src/app/projects/[id]/proposals/page.tsx
++++ b/story-architect/src/app/projects/[id]/proposals/page.tsx
+@@ -3,6 +3,10 @@
+ import { useEffect, useState } from "react";
+ import Link from "next/link";
+ import { useParams } from "next/navigation";
++import {
++  LORE_FACT_CATEGORY_LABELS,
++  type LoreFactCategory,
++} from "@/lib/schemas/loreFact";
+ 
+ type ChapterPlan = {
+   chapterPurpose?: string;
+@@ -55,6 +59,11 @@ type Proposal = {
+       consequences?: string;
+       inWorldDate?: string;
+       type?: string;
++      evidenceQuote?: string;
++      confidence?: number;
++      category?: string;
++      ambiguity?: string | null;
++      source?: { materialTitle?: string };
+     };
+ 
+     chapterPurpose?: string;
+@@ -969,7 +978,7 @@ export default function ProposalsPage() {
+                               "0 0 12px",
+                           }}
+                         >
+-                          {data.name || data.question || "Без названия"}
++                          {data.name || data.question || data.statement || "Без названия"}
+                         </h2>
+ 
+                         {data.description && (
+@@ -993,7 +1002,7 @@ export default function ProposalsPage() {
+                           </p>
+                         )}
+ 
+-                        {data.statement && (
++                        {data.statement && proposal.entityType !== "LORE_FACT" && (
+                           <p>
+                             <strong>Формулировка:</strong>{" "}
+                             {data.statement}
+@@ -1026,6 +1035,52 @@ export default function ProposalsPage() {
+                           </p>
+                         )}
+ 
++                        {proposal.entityType === "LORE_FACT" && (
++                          <div style={{ marginTop: 8 }}>
++                            {data.source?.materialTitle && (
++                              <p>
++                                <strong>Материал:</strong>{" "}
++                                {data.source.materialTitle}
++                              </p>
++                            )}
++
++                            {data.evidenceQuote && (
++                              <blockquote
++                                style={{
++                                  margin: "8px 0",
++                                  padding: "8px 12px",
++                                  borderLeft: "4px solid #d9c58b",
++                                  background: "#fffdf5",
++                                  whiteSpace: "pre-wrap",
++                                }}
++                              >
++                                «{data.evidenceQuote}»
++                              </blockquote>
++                            )}
++
++                            <p>
++                              <strong>Уверенность:</strong>{" "}
++                              {typeof data.confidence === "number"
++                                ? `${Math.round(data.confidence * 100)}%`
++                                : "не указана"}
++                              {data.category
++                                ? ` · Категория: ${
++                                    LORE_FACT_CATEGORY_LABELS[
++                                      data.category as LoreFactCategory
++                                    ] ?? data.category
++                                  }`
++                                : ""}
++                            </p>
++
++                            {data.ambiguity && (
++                              <p style={{ color: "#8a5a00" }}>
++                                <strong>Неоднозначность:</strong>{" "}
++                                {data.ambiguity}
++                              </p>
++                            )}
++                          </div>
++                        )}
++
+                         {data.role && (
+                           <p>
+                             <strong>
+diff --git a/story-architect/src/lib/ai/provider.ts b/story-architect/src/lib/ai/provider.ts
+index 7bbd02b..4f1d7d1 100644
+--- a/story-architect/src/lib/ai/provider.ts
++++ b/story-architect/src/lib/ai/provider.ts
+@@ -152,6 +152,13 @@ export async function complete(
+     );
+   }
+ 
++  const baseUrl = env("AI_BASE_URL").trim().replace(/\/+$/, "");
++  if (!baseUrl) {
++    throw new AiProviderError(
++      "AI_BASE_URL не настроен (например, https://api.openai.com/v1)"
++    );
++  }
++
+   const body: Record<string, unknown> = {
+     model: cfg.model,
+     messages: req.messages,
+@@ -170,7 +177,7 @@ export async function complete(
+     };
+   }
+ 
+-  const res = await fetch(`${env("AI_BASE_URL")}/chat/completions`, {
++  const res = await fetch(`${baseUrl}/chat/completions`, {
+     method: "POST",
+     headers: {
+       "Content-Type": "application/json",
+diff --git a/story-architect/src/lib/canon/write.ts b/story-architect/src/lib/canon/write.ts
+index 44f91c4..b3560a6 100644
+--- a/story-architect/src/lib/canon/write.ts
++++ b/story-architect/src/lib/canon/write.ts
+@@ -19,6 +19,10 @@ import {
+ } from "./proposal-state";
+ 
+ import { proposalPayloadSchema } from "@/lib/schemas/proposal";
++import {
++  editedLoreStatement,
++  loreFactPayloadSchema,
++} from "@/lib/schemas/loreFact";
+ import { planRelationshipMerge } from "./relationshipMerge";
+ import { splitMemoryBySafety } from "./memorySafety";
+ 
+@@ -1870,13 +1874,102 @@ export async function applyProposal(
+ 
+        */
+ 
+-      if (
++      /**
++         * =====================================================
++         * LORE FACT (факт из Lore Library)
++         * Обрабатывается отдельно от общих Canon proposals.
++         * =====================================================
++         */
++        if (proposal.entityType === "LORE_FACT") {
++          if (proposal.op !== "CREATE") {
++            throw new ProposalStateError(
++              `Операция ${proposal.op} не поддерживается для факта Lore Library`
++            );
++          }
+ 
+-        proposal.entityType ===
++          const original = loreFactPayloadSchema.parse(proposal.payload);
+ 
+-        "chapter_plan"
++          // EDIT_AND_ACCEPT меняет только утверждение: цитата и
++          // происхождение факта остаются исходными.
++          let factPayload = original;
+ 
+-      ) {
++          if (action === "EDIT_AND_ACCEPT") {
++            const editedStatement = editedLoreStatement(editedPayload);
++
++            if (!editedStatement) {
++              throw new ProposalStateError(
++                "Для факта Lore Library нужно непустое утверждение"
++              );
++            }
++
++            factPayload = loreFactPayloadSchema.parse({
++              entityType: "LORE_FACT",
++              data: { ...original.data, statement: editedStatement },
++            });
++          }
++
++          // Идемпотентность: один Proposal порождает не более одного CanonFact.
++          const existingFact = await tx.canonFact.findFirst({
++            where: {
++              projectId: proposal.projectId,
++              sourceProposalId: proposal.id,
++            },
++            select: { id: true },
++          });
++
++          const fact =
++            existingFact ??
++            (await tx.canonFact.create({
++              data: {
++                projectId: proposal.projectId,
++                statement: factPayload.data.statement,
++                status: "CANON",
++                factSource: "AI_EXTRACTION",
++                confidence: factPayload.data.confidence,
++                sourceProposalId: proposal.id,
++                sourceAiRunId: proposal.aiRunId ?? null,
++              },
++              select: { id: true },
++            }));
++
++          const acceptedProposal = await tx.proposal.update({
++            where: { id: proposal.id },
++            data: {
++              status: transition.next,
++              entityId: fact.id,
++              editedPayload:
++                action === "EDIT_AND_ACCEPT"
++                  ? toInputJson(factPayload)
++                  : undefined,
++              reviewedAt: new Date(),
++              reviewedById: actor.userId,
++            },
++          });
++
++          await tx.changeLog.create({
++            data: {
++              projectId: proposal.projectId,
++              entityType: proposal.entityType,
++              entityId: fact.id,
++              op: proposal.op,
++              before: Prisma.JsonNull,
++              after: toInputJson(factPayload),
++              actorType: "AUTHOR",
++              actorId: actor.userId,
++              proposalId: proposal.id,
++              aiRunId: proposal.aiRunId,
++              chapterId: proposal.sourceChapterId,
++            },
++          });
++
++          return {
++            proposal: acceptedProposal,
++            canonEntityId: fact.id,
++            canonChanged: true,
++          };
++        }
++
++        if (proposal.entityType === "chapter_plan") {
+ 
+         if (
+ 
+diff --git a/story-architect/src/lib/lore/extraction.ts b/story-architect/src/lib/lore/extraction.ts
+new file mode 100644
+index 0000000..413558a
+--- /dev/null
++++ b/story-architect/src/lib/lore/extraction.ts
+@@ -0,0 +1,293 @@
++/**
++ * Извлечение фактов из материала Lore Library: промпт, разбор ответа AI,
++ * проверка цитат и отбор. Чистая логика без базы данных и без вызова модели.
++ *
++ * Принципы:
++ *  - AI только ПРЕДЛАГАЕТ факты: результат превращается в Proposal (PENDING);
++ *  - каждая цитата обязана буквально присутствовать в исходном тексте,
++ *    иначе факт отклоняется;
++ *  - гипотезы, вопросы и предположения фактами не считаются.
++ */
++import { z } from "zod";
++import {
++  LORE_FACT_CATEGORIES,
++  LORE_FACT_LIMITS,
++  type LoreFactCategory,
++} from "@/lib/schemas/loreFact";
++
++export const MAX_SOURCE_CHARS = 30_000;
++export const MAX_FACTS = 40;
++/** Слишком короткая цитата ничего не доказывает. */
++export const MIN_QUOTE_CHARS = 12;
++
++// ───────────────────────── подготовка источника ───────────────────────────
++
++export function prepareSource(raw: string): {
++  text: string;
++  truncated: boolean;
++} {
++  const text = raw.replace(/\r\n?/g, "\n").trim();
++
++  if (text.length <= MAX_SOURCE_CHARS) return { text, truncated: false };
++
++  const cut = text.slice(0, MAX_SOURCE_CHARS);
++  const lastBreak = Math.max(cut.lastIndexOf("\n"), cut.lastIndexOf(". "));
++
++  return {
++    text: (lastBreak > MAX_SOURCE_CHARS * 0.8 ? cut.slice(0, lastBreak + 1) : cut).trim(),
++    truncated: true,
++  };
++}
++
++// ───────────────────────── запрос к модели ────────────────────────────────
++
++export const EXTRACTION_JSON_SCHEMA = {
++  name: "lore_fact_extraction",
++  schema: {
++    type: "object",
++    additionalProperties: false,
++    properties: {
++      facts: {
++        type: "array",
++        items: {
++          type: "object",
++          additionalProperties: false,
++          properties: {
++            statement: { type: "string" },
++            evidenceQuote: { type: "string" },
++            confidence: { type: "number" },
++            category: { type: "string", enum: [...LORE_FACT_CATEGORIES] },
++            ambiguity: { type: "string" },
++          },
++          required: [
++            "statement",
++            "evidenceQuote",
++            "confidence",
++            "category",
++            "ambiguity",
++          ],
++        },
++      },
++    },
++    required: ["facts"],
++  },
++} as const;
++
++const SYSTEM_PROMPT = `Ты извлекаешь фактические утверждения из материала Lore Library для системы Story Architect.
++
++Твоя задача — найти в тексте атомарные факты о вымышленном мире и вернуть их для проверки автором. Автор сам решает, что станет Canon.
++
++ПРАВИЛА:
++1. Извлекай только то, что прямо сказано в тексте. Ничего не добавляй от себя и не опирайся на внешние знания.
++2. Один факт — одно простое утверждение на русском языке (одна мысль, без «и», склеивающих разные факты).
++3. НЕ превращай в факты гипотезы, предположения, слухи, вопросы, мечты и желания героев, сослагательные и условные формулировки («возможно», «говорят», «если бы»). Такие места пропусти.
++4. Если утверждение зависит от ненадёжного рассказчика или допускает разное прочтение, всё равно можно извлечь его, но опиши причину в поле ambiguity и снизь confidence. Если неоднозначности нет, ambiguity — пустая строка.
++5. evidenceQuote — ТОЧНАЯ цитата из текста: непрерывный фрагмент, скопированный символ в символ (без изменений, пересказа и сокращений). Желательно одно-два предложения.
++6. confidence — число от 0 до 1: насколько прямо текст подтверждает факт.
++7. category — одно значение из списка: ${LORE_FACT_CATEGORIES.join(", ")}.
++8. Не более ${MAX_FACTS} фактов; выбирай самые значимые для мира и сюжета.
++9. Если в тексте нет подходящих фактов, верни пустой массив facts.
++
++Верни ТОЛЬКО JSON по заданной схеме.`;
++
++export function buildExtractionMessages(title: string, sourceText: string) {
++  return [
++    { role: "system" as const, content: SYSTEM_PROMPT },
++    {
++      role: "user" as const,
++      content: `НАЗВАНИЕ МАТЕРИАЛА:\n${title || "Без названия"}\n\nТЕКСТ МАТЕРИАЛА:\n"""\n${sourceText}\n"""\n\nИзвлеки факты по правилам.`,
++    },
++  ];
++}
++
++// ───────────────────────── разбор ответа ──────────────────────────────────
++
++const rawFactSchema = z.object({
++  statement: z.string(),
++  evidenceQuote: z.string(),
++  confidence: z.number(),
++  category: z.string().optional(),
++  ambiguity: z.string().nullable().optional(),
++});
++
++export type RawFact = z.infer<typeof rawFactSchema>;
++
++export type ParsedExtraction =
++  | { ok: true; facts: RawFact[]; invalidItems: number }
++  | { ok: false; error: string };
++
++function stripFences(text: string): string {
++  const trimmed = text.trim();
++  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
++
++  return fenced?.[1] ?? trimmed;
++}
++
++export function parseExtractionResponse(text: string): ParsedExtraction {
++  const cleaned = stripFences(text);
++
++  if (!cleaned) return { ok: false, error: "AI вернул пустой ответ." };
++
++  let json: unknown;
++
++  try {
++    json = JSON.parse(cleaned);
++  } catch {
++    // Иногда вокруг JSON есть лишний текст: пробуем взять внешний объект.
++    const start = cleaned.indexOf("{");
++    const end = cleaned.lastIndexOf("}");
++
++    if (start === -1 || end <= start) {
++      return { ok: false, error: "AI вернул не JSON." };
++    }
++
++    try {
++      json = JSON.parse(cleaned.slice(start, end + 1));
++    } catch {
++      return { ok: false, error: "AI вернул некорректный JSON." };
++    }
++  }
++
++  const facts =
++    json && typeof json === "object" ? (json as { facts?: unknown }).facts : undefined;
++
++  if (!Array.isArray(facts)) {
++    return { ok: false, error: "В ответе AI нет списка facts." };
++  }
++
++  const valid: RawFact[] = [];
++  let invalidItems = 0;
++
++  for (const item of facts) {
++    const parsed = rawFactSchema.safeParse(item);
++
++    if (parsed.success) valid.push(parsed.data);
++    else invalidItems++;
++  }
++
++  return { ok: true, facts: valid, invalidItems };
++}
++
++// ───────────────────────── проверка цитат и отбор ─────────────────────────
++
++const collapse = (value: string) => value.replace(/\s+/g, " ").trim();
++
++/**
++ * Цитата должна буквально присутствовать в источнике. Допускается только
++ * различие в пробелах и переносах строк (текст при этом не меняется).
++ */
++export function verifyQuote(source: string, quote: string): boolean {
++  const trimmed = quote.trim();
++
++  if (trimmed.length < MIN_QUOTE_CHARS) return false;
++
++  return source.includes(trimmed) || collapse(source).includes(collapse(trimmed));
++}
++
++export function normalizeStatement(value: string): string {
++  return value
++    .toLowerCase()
++    .replace(/ё/g, "е")
++    .replace(/[«»"'“”„‘’.,;:!?()[\]—–-]/g, " ")
++    .replace(/\s+/g, " ")
++    .trim();
++}
++
++export type SkipReason =
++  | "empty_statement"
++  | "quote_not_found"
++  | "duplicate_in_response"
++  | "duplicate_pending"
++  | "previously_rejected"
++  | "already_canon"
++  | "limit_exceeded";
++
++export type SelectedFact = {
++  statement: string;
++  evidenceQuote: string;
++  confidence: number;
++  category: LoreFactCategory;
++  ambiguity: string | null;
++};
++
++export type SkippedFact = { statement: string; reason: SkipReason };
++
++export type ExistingFacts = {
++  /** Нормализованные утверждения, ожидающие решения для ЭТОГО материала. */
++  pending: ReadonlySet<string>;
++  /** Нормализованные утверждения, отклонённые автором для ЭТОГО материала. */
++  rejected: ReadonlySet<string>;
++  /** Нормализованные утверждения, уже принятые в Canon проекта. */
++  canon: ReadonlySet<string>;
++};
++
++const categorySet = new Set<string>(LORE_FACT_CATEGORIES);
++
++export function selectFacts(
++  rawFacts: readonly RawFact[],
++  source: string,
++  existing: ExistingFacts
++): { accepted: SelectedFact[]; skipped: SkippedFact[] } {
++  const accepted: SelectedFact[] = [];
++  const skipped: SkippedFact[] = [];
++  const seen = new Set<string>();
++
++  for (const raw of rawFacts) {
++    const statement = collapse(raw.statement).slice(0, LORE_FACT_LIMITS.statement);
++
++    if (!statement) {
++      skipped.push({ statement: raw.statement, reason: "empty_statement" });
++      continue;
++    }
++
++    // Неподтверждённые цитатой результаты отклоняются.
++    if (!verifyQuote(source, raw.evidenceQuote)) {
++      skipped.push({ statement, reason: "quote_not_found" });
++      continue;
++    }
++
++    const key = normalizeStatement(statement);
++
++    if (seen.has(key)) {
++      skipped.push({ statement, reason: "duplicate_in_response" });
++      continue;
++    }
++
++    if (existing.pending.has(key)) {
++      skipped.push({ statement, reason: "duplicate_pending" });
++      continue;
++    }
++
++    if (existing.rejected.has(key)) {
++      skipped.push({ statement, reason: "previously_rejected" });
++      continue;
++    }
++
++    if (existing.canon.has(key)) {
++      skipped.push({ statement, reason: "already_canon" });
++      continue;
++    }
++
++    if (accepted.length >= MAX_FACTS) {
++      skipped.push({ statement, reason: "limit_exceeded" });
++      continue;
++    }
++
++    seen.add(key);
++
++    const ambiguity = raw.ambiguity?.trim();
++
++    accepted.push({
++      statement,
++      // Цитата сохраняется в том виде, как она встречается в запросе проверки.
++      evidenceQuote: raw.evidenceQuote.trim().slice(0, LORE_FACT_LIMITS.quote),
++      confidence: Math.min(1, Math.max(0, Number.isFinite(raw.confidence) ? raw.confidence : 0)),
++      category: categorySet.has(raw.category ?? "")
++        ? (raw.category as LoreFactCategory)
++        : "OTHER",
++      ambiguity: ambiguity ? ambiguity.slice(0, LORE_FACT_LIMITS.ambiguity) : null,
++    });
++  }
++
++  return { accepted, skipped };
++}
+diff --git a/story-architect/src/lib/schemas/loreFact.ts b/story-architect/src/lib/schemas/loreFact.ts
+new file mode 100644
+index 0000000..f68b747
+--- /dev/null
++++ b/story-architect/src/lib/schemas/loreFact.ts
+@@ -0,0 +1,82 @@
++/**
++ * Факт, извлечённый из материала Lore Library.
++ *
++ * Хранится в Proposal с entityType "LORE_FACT". Сознательно НЕ входит в
++ * общую схему proposalPayloadSchema: обработка этого типа отдельная
++ * (см. applyProposal), чтобы не затрагивать существующие типы предложений.
++ */
++import { z } from "zod";
++
++export const LORE_FACT_CATEGORIES = [
++  "CHARACTER",
++  "LOCATION",
++  "FACTION",
++  "EVENT",
++  "RULE",
++  "OBJECT",
++  "RELATIONSHIP",
++  "HISTORY",
++  "OTHER",
++] as const;
++
++export type LoreFactCategory = (typeof LORE_FACT_CATEGORIES)[number];
++
++export const LORE_FACT_CATEGORY_LABELS: Record<LoreFactCategory, string> = {
++  CHARACTER: "персонаж",
++  LOCATION: "локация",
++  FACTION: "фракция",
++  EVENT: "событие",
++  RULE: "правило мира",
++  OBJECT: "предмет",
++  RELATIONSHIP: "отношения",
++  HISTORY: "история мира",
++  OTHER: "другое",
++};
++
++export const LORE_FACT_LIMITS = {
++  statement: 600,
++  quote: 1200,
++  ambiguity: 600,
++  title: 300,
++} as const;
++
++export const loreFactDataSchema = z.object({
++  /** Атомарное фактическое утверждение. */
++  statement: z.string().trim().min(1).max(LORE_FACT_LIMITS.statement),
++  /** Дословная цитата из исходного материала. */
++  evidenceQuote: z.string().min(1).max(LORE_FACT_LIMITS.quote),
++  confidence: z.number().min(0).max(1),
++  category: z.enum(LORE_FACT_CATEGORIES),
++  ambiguity: z.string().max(LORE_FACT_LIMITS.ambiguity).nullable().optional(),
++  source: z.object({
++    type: z.literal("LORE_MATERIAL"),
++    materialId: z.string().min(1),
++    materialTitle: z.string().max(LORE_FACT_LIMITS.title),
++  }),
++});
++
++export const loreFactPayloadSchema = z.object({
++  entityType: z.literal("LORE_FACT"),
++  data: loreFactDataSchema,
++});
++
++export type LoreFactData = z.infer<typeof loreFactDataSchema>;
++export type LoreFactPayload = z.infer<typeof loreFactPayloadSchema>;
++
++/**
++ * Утверждение из отредактированного автором payload. Допускаются обе формы:
++ * { data: { statement } } и { statement }. Остальные поля игнорируются:
++ * цитата и происхождение факта всегда остаются исходными.
++ */
++export function editedLoreStatement(edited: unknown): string | null {
++  const record = edited as {
++    data?: { statement?: unknown };
++    statement?: unknown;
++  } | null;
++
++  const candidate = record?.data?.statement ?? record?.statement;
++
++  return typeof candidate === "string" && candidate.trim()
++    ? candidate.trim()
++    : null;
++}
+diff --git a/story-architect/tests/ai-provider-complete.test.ts b/story-architect/tests/ai-provider-complete.test.ts
+new file mode 100644
+index 0000000..07e7d60
+--- /dev/null
++++ b/story-architect/tests/ai-provider-complete.test.ts
+@@ -0,0 +1,93 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++vi.mock("server-only", () => ({}));
++
++import { AiProviderError, complete } from "../src/lib/ai/provider";
++
++const names = [
++  "OPENAI_API_KEY",
++  "AI_BASE_URL",
++  "AI_MODEL_STRONG",
++  "AI_MOCK",
++  "AI_PRICE_STRONG_IN",
++  "AI_PRICE_STRONG_OUT",
++] as const;
++
++const saved: Record<string, string | undefined> = {};
++
++beforeEach(() => {
++  for (const name of names) {
++    saved[name] = process.env[name];
++    delete process.env[name];
++  }
++});
++
++afterEach(() => {
++  for (const name of names) {
++    if (saved[name] === undefined) delete process.env[name];
++    else process.env[name] = saved[name];
++  }
++  vi.unstubAllGlobals();
++});
++
++const request = {
++  modelClass: "STRONG" as const,
++  messages: [{ role: "user" as const, content: "привет" }],
++};
++
++describe("complete(): проверка настроек до обращения к сети", () => {
++  it("без ключа — понятная ошибка, сеть не используется", async () => {
++    const fetchMock = vi.fn();
++    vi.stubGlobal("fetch", fetchMock);
++    process.env.AI_MODEL_STRONG = "model-x";
++    process.env.AI_BASE_URL = "https://api.example.com/v1";
++
++    await expect(complete(request)).rejects.toThrow(AiProviderError);
++    expect(fetchMock).not.toHaveBeenCalled();
++  });
++
++  it("без AI_MODEL_STRONG — ошибка, сеть не используется", async () => {
++    const fetchMock = vi.fn();
++    vi.stubGlobal("fetch", fetchMock);
++    process.env.OPENAI_API_KEY = "sk-test-key-aaaaaaaa";
++    process.env.AI_BASE_URL = "https://api.example.com/v1";
++
++    await expect(complete(request)).rejects.toThrow(AiProviderError);
++    expect(fetchMock).not.toHaveBeenCalled();
++  });
++
++  it("без AI_BASE_URL — понятная ошибка вместо обращения к относительному адресу", async () => {
++    const fetchMock = vi.fn();
++    vi.stubGlobal("fetch", fetchMock);
++    process.env.OPENAI_API_KEY = "sk-test-key-aaaaaaaa";
++    process.env.AI_MODEL_STRONG = "model-x";
++
++    await expect(complete(request)).rejects.toThrow("AI_BASE_URL");
++    expect(fetchMock).not.toHaveBeenCalled();
++  });
++
++  it("при полной настройке обращается к заданному адресу с ключом из OPENAI_API_KEY", async () => {
++    const fetchMock = vi.fn(async () => ({
++      ok: true,
++      status: 200,
++      json: async () => ({
++        choices: [{ message: { content: "{}" } }],
++        usage: { prompt_tokens: 1, completion_tokens: 1 },
++      }),
++      text: async () => "",
++    }));
++    vi.stubGlobal("fetch", fetchMock);
++    process.env.OPENAI_API_KEY = "sk-test-key-aaaaaaaa";
++    process.env.AI_BASE_URL = "https://api.example.com/v1/";
++    process.env.AI_MODEL_STRONG = "model-x";
++
++    const result = await complete(request);
++
++    expect(result.text).toBe("{}");
++    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
++    expect(url).toBe("https://api.example.com/v1/chat/completions");
++    expect((init.headers as Record<string, string>).Authorization).toBe(
++      "Bearer sk-test-key-aaaaaaaa"
++    );
++  });
++});
+diff --git a/story-architect/tests/lore-extract-route.test.ts b/story-architect/tests/lore-extract-route.test.ts
+new file mode 100644
+index 0000000..ede5410
+--- /dev/null
++++ b/story-architect/tests/lore-extract-route.test.ts
+@@ -0,0 +1,336 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++/**
++ * Маршрут извлечения фактов из Lore Library (настоящий обработчик).
++ * База данных заменена хранилищем в памяти, модель — заглушкой, авторизация
++ * — заглушкой. Это НЕ тест на реальной базе и на реальной модели.
++ */
++
++const h = vi.hoisted(() => ({
++  userId: "user-1" as string | null,
++  projects: [] as any[],
++  materials: [] as any[],
++  proposals: [] as any[],
++  canonFacts: [] as any[],
++  canonFactCreates: 0,
++  completeCalls: [] as any[],
++  completeImpl: null as null | ((req: any) => Promise<any>),
++}));
++
++vi.mock("@/auth", () => ({
++  auth: async () => (h.userId ? { user: { id: h.userId } } : null),
++}));
++
++vi.mock("@/lib/ai/provider", () => {
++  class AiProviderError extends Error {
++    constructor(message: string, readonly status?: number) {
++      super(message);
++    }
++  }
++
++  return {
++    AiProviderError,
++    redact: (value: string) => value.replace(/sk-[A-Za-z0-9]+/g, "sk-***"),
++    complete: async (req: any) => {
++      h.completeCalls.push(req);
++      if (!h.completeImpl) throw new Error("completeImpl не задан");
++      return h.completeImpl(req);
++    },
++  };
++});
++
++vi.mock("@/lib/db", () => ({
++  prisma: {
++    project: {
++      findFirst: async ({ where }: any) =>
++        h.projects.find((p) => p.id === where.id && p.userId === where.userId) ?? null,
++    },
++    loreMaterial: {
++      findFirst: async ({ where }: any) =>
++        h.materials.find((m) => m.id === where.id && m.projectId === where.projectId) ?? null,
++    },
++    proposal: {
++      findMany: async ({ where }: any) =>
++        h.proposals.filter(
++          (p) =>
++            p.projectId === where.projectId &&
++            p.entityType === where.entityType &&
++            where.status.in.includes(p.status)
++        ),
++      create: async ({ data }: any) => {
++        const row = { id: `prop-${h.proposals.length + 1}`, ...data };
++        h.proposals.push(row);
++        return row;
++      },
++    },
++    canonFact: {
++      findMany: async ({ where }: any) =>
++        h.canonFacts.filter((f) => f.projectId === where.projectId && f.status === where.status),
++      create: async () => {
++        h.canonFactCreates++;
++        return { id: "never" };
++      },
++    },
++    $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
++  },
++}));
++
++import { POST } from "../src/app/api/projects/[id]/lore/[materialId]/extract/route";
++import { AiProviderError } from "../src/lib/ai/provider";
++
++const TEXT =
++  "Империя Пепла основана императором Каэлем в 312 году.\nСтолица империи — Ривенхольм, город у замёрзшего моря.\nСовет Трёх Гильдий управляет торговлей империи.";
++
++const ctx = (id = "p1", materialId = "m1") => ({
++  params: Promise.resolve({ id, materialId }),
++});
++
++const call = (id?: string, materialId?: string) =>
++  POST(new Request("http://t", { method: "POST" }), ctx(id, materialId));
++
++const modelFact = (statement: string, quote: string, extra: Record<string, unknown> = {}) => ({
++  statement,
++  evidenceQuote: quote,
++  confidence: 0.9,
++  category: "HISTORY",
++  ambiguity: "",
++  ...extra,
++});
++
++const answer = (facts: unknown[]) => async () => ({
++  text: JSON.stringify({ facts }),
++  model: "test-model",
++});
++
++const goodFacts = [
++  modelFact("Империю Пепла основал император Каэль", "Империя Пепла основана императором Каэлем в 312 году."),
++  modelFact("Столица империи — Ривенхольм", "Столица империи — Ривенхольм, город у замёрзшего моря."),
++];
++
++beforeEach(() => {
++  h.userId = "user-1";
++  h.projects = [
++    { id: "p1", userId: "user-1" },
++    { id: "p2", userId: "user-2" },
++  ];
++  h.materials = [
++    { id: "m1", projectId: "p1", title: "Хроники", content: TEXT },
++    { id: "m2", projectId: "p2", title: "Чужое", content: TEXT },
++    { id: "m3", projectId: "p1", title: "Пустое", content: "   " },
++  ];
++  h.proposals = [];
++  h.canonFacts = [];
++  h.canonFactCreates = 0;
++  h.completeCalls = [];
++  h.completeImpl = answer(goodFacts);
++});
++
++describe("доступ", () => {
++  it("без входа — 401, модель не вызывается", async () => {
++    h.userId = null;
++    expect((await call()).status).toBe(401);
++    expect(h.completeCalls).toHaveLength(0);
++  });
++
++  it("чужой проект — 404, модель не вызывается", async () => {
++    const response = await call("p2", "m2");
++    expect(response.status).toBe(404);
++    expect(h.completeCalls).toHaveLength(0);
++    expect(h.proposals).toHaveLength(0);
++  });
++
++  it("материал другого проекта недоступен — 404", async () => {
++    const response = await call("p1", "m2");
++    expect(response.status).toBe(404);
++    expect(h.completeCalls).toHaveLength(0);
++  });
++
++  it("несуществующий материал — 404", async () => {
++    expect((await call("p1", "нет")).status).toBe(404);
++  });
++});
++
++describe("входные данные и ошибки AI", () => {
++  it("пустой материал — 400, модель не вызывается", async () => {
++    const response = await call("p1", "m3");
++    expect(response.status).toBe(400);
++    expect(h.completeCalls).toHaveLength(0);
++  });
++
++  it("запрос к модели: класс STRONG, текст из базы, структурированный ответ", async () => {
++    await call();
++    expect(h.completeCalls).toHaveLength(1);
++    const request = h.completeCalls[0];
++    expect(request.modelClass).toBe("STRONG");
++    expect(request.jsonSchema.name).toBe("lore_fact_extraction");
++    expect(request.messages[1].content).toContain("Империя Пепла основана императором Каэлем");
++  });
++
++  it("ошибка настройки AI — 503, предложения не создаются", async () => {
++    h.completeImpl = async () => {
++      throw new AiProviderError("OPENAI_API_KEY не настроен.");
++    };
++    const response = await call();
++    expect(response.status).toBe(503);
++    expect(h.proposals).toHaveLength(0);
++  });
++
++  it("ошибка провайдера со статусом — 502, ключ в сообщении скрыт", async () => {
++    h.completeImpl = async () => {
++      throw new AiProviderError("Провайдер вернул 401: key sk-secret123456", 401);
++    };
++    const response = await call();
++    const body = await response.json();
++    expect(response.status).toBe(502);
++    expect(body.error).not.toContain("secret123456");
++    expect(h.proposals).toHaveLength(0);
++  });
++
++  it("неожиданное исключение при вызове модели — 502", async () => {
++    h.completeImpl = async () => {
++      throw new Error("сеть недоступна");
++    };
++    expect((await call()).status).toBe(502);
++  });
++
++  it("некорректный JSON и пустой ответ — 502, ничего не создаётся", async () => {
++    for (const text of ["не json", "", '{"facts": ']) {
++      h.completeImpl = async () => ({ text, model: "m" });
++      expect((await call()).status).toBe(502);
++    }
++    expect(h.proposals).toHaveLength(0);
++  });
++
++  it("ответ без списка facts — 502", async () => {
++    h.completeImpl = async () => ({ text: '{"result": []}', model: "m" });
++    expect((await call()).status).toBe(502);
++  });
++
++  it("пустой список фактов — успех без предложений", async () => {
++    h.completeImpl = answer([]);
++    const body = await (await call()).json();
++    expect(body.ok).toBe(true);
++    expect(body.created).toBe(0);
++  });
++});
++
++describe("создание предложений", () => {
++  it("каждый факт — Proposal LORE_FACT / CREATE / PENDING", async () => {
++    const response = await call();
++    const body = await response.json();
++
++    expect(response.status).toBe(200);
++    expect(body.created).toBe(2);
++    expect(h.proposals).toHaveLength(2);
++
++    for (const proposal of h.proposals) {
++      expect(proposal.entityType).toBe("LORE_FACT");
++      expect(proposal.op).toBe("CREATE");
++      expect(proposal.status).toBe("PENDING");
++      expect(proposal.projectId).toBe("p1");
++      expect(proposal.reason).toContain("Хроники");
++    }
++  });
++
++  it("payload хранит утверждение, цитату, источник, уверенность и категорию", async () => {
++    await call();
++    const payload = h.proposals[0].payload;
++
++    expect(payload.entityType).toBe("LORE_FACT");
++    expect(payload.data.statement).toBe("Империю Пепла основал император Каэль");
++    expect(payload.data.evidenceQuote).toBe("Империя Пепла основана императором Каэлем в 312 году.");
++    expect(payload.data.confidence).toBe(0.9);
++    expect(payload.data.category).toBe("HISTORY");
++    expect(payload.data.source).toEqual({
++      type: "LORE_MATERIAL",
++      materialId: "m1",
++      materialTitle: "Хроники",
++    });
++  });
++
++  it("неоднозначность сохраняется в payload", async () => {
++    h.completeImpl = answer([
++      modelFact("Совет управляет торговлей", "Совет Трёх Гильдий управляет торговлей империи.", {
++        ambiguity: "Не ясно, какие именно гильдии",
++        confidence: 0.6,
++      }),
++    ]);
++    await call();
++    expect(h.proposals[0].payload.data.ambiguity).toBe("Не ясно, какие именно гильдии");
++    expect(h.proposals[0].payload.data.confidence).toBe(0.6);
++  });
++
++  it("факт с выдуманной цитатой отклоняется и не создаётся", async () => {
++    h.completeImpl = answer([
++      ...goodFacts,
++      modelFact("Император правил сорок лет", "Император Каэль правил империей сорок лет подряд."),
++    ]);
++    const body = await (await call()).json();
++
++    expect(body.created).toBe(2);
++    expect(body.skipped).toEqual([
++      { statement: "Император правил сорок лет", reason: "quote_not_found" },
++    ]);
++    expect(h.proposals.map((p) => p.payload.data.statement)).not.toContain("Император правил сорок лет");
++  });
++
++  it("при извлечении Canon не меняется", async () => {
++    await call();
++    expect(h.canonFactCreates).toBe(0);
++    expect(h.canonFacts).toHaveLength(0);
++  });
++});
++
++describe("повторное извлечение и дубликаты", () => {
++  it("повторный запуск не создаёт дублей ожидающих предложений", async () => {
++    await call();
++    const second = await (await call()).json();
++
++    expect(second.created).toBe(0);
++    expect(second.skipped.map((s: any) => s.reason)).toEqual(["duplicate_pending", "duplicate_pending"]);
++    expect(h.proposals).toHaveLength(2);
++  });
++
++  it("отклонённые автором факты не возвращаются", async () => {
++    await call();
++    h.proposals[0].status = "REJECTED";
++
++    const second = await (await call()).json();
++    expect(second.created).toBe(0);
++    expect(second.skipped.map((s: any) => s.reason).sort()).toEqual([
++      "duplicate_pending",
++      "previously_rejected",
++    ]);
++  });
++
++  it("факты, уже принятые в Canon, не предлагаются снова", async () => {
++    h.canonFacts = [
++      { projectId: "p1", status: "CANON", statement: "Столица империи — Ривенхольм" },
++    ];
++    const body = await (await call()).json();
++
++    expect(body.created).toBe(1);
++    expect(body.skipped).toEqual([
++      { statement: "Столица империи — Ривенхольм", reason: "already_canon" },
++    ]);
++  });
++
++  it("предложения другого материала не мешают", async () => {
++    h.materials.push({ id: "m4", projectId: "p1", title: "Другой", content: TEXT });
++    await call("p1", "m1");
++    const other = await (await call("p1", "m4")).json();
++
++    expect(other.created).toBe(2);
++    expect(h.proposals).toHaveLength(4);
++  });
++});
++
++describe("ограничения объёма", () => {
++  it("слишком длинный материал обрабатывается частично и помечается", async () => {
++    h.materials[0].content = "Империя Пепла основана императором Каэлем в 312 году. " + "Слово. ".repeat(10000);
++    const body = await (await call()).json();
++
++    expect(body.truncated).toBe(true);
++    expect(h.completeCalls[0].messages[1].content.length).toBeLessThan(31000);
++  });
++});
+diff --git a/story-architect/tests/lore-extraction.test.ts b/story-architect/tests/lore-extraction.test.ts
+new file mode 100644
+index 0000000..111fecb
+--- /dev/null
++++ b/story-architect/tests/lore-extraction.test.ts
+@@ -0,0 +1,255 @@
++import { describe, expect, it } from "vitest";
++import {
++  EXTRACTION_JSON_SCHEMA,
++  MAX_FACTS,
++  MAX_SOURCE_CHARS,
++  buildExtractionMessages,
++  normalizeStatement,
++  parseExtractionResponse,
++  prepareSource,
++  selectFacts,
++  verifyQuote,
++  type ExistingFacts,
++  type RawFact,
++} from "../src/lib/lore/extraction";
++import {
++  editedLoreStatement,
++  loreFactPayloadSchema,
++} from "../src/lib/schemas/loreFact";
++
++const SOURCE =
++  "Империя Пепла основана императором Каэлем в 312 году.\nСтолица империи — Ривенхольм, город у замёрзшего моря.\nГоворят, что под городом лежит древний город.";
++
++const none: ExistingFacts = {
++  pending: new Set(),
++  rejected: new Set(),
++  canon: new Set(),
++};
++
++const fact = (partial: Partial<RawFact> = {}): RawFact => ({
++  statement: "Империю Пепла основал император Каэль",
++  evidenceQuote: "Империя Пепла основана императором Каэлем в 312 году.",
++  confidence: 0.95,
++  category: "HISTORY",
++  ambiguity: "",
++  ...partial,
++});
++
++describe("prepareSource", () => {
++  it("нормализует переносы строк и обрезает пробелы", () => {
++    expect(prepareSource("  a\r\nb  ")).toEqual({ text: "a\nb", truncated: false });
++  });
++
++  it("длинный текст ограничивается и помечается усечённым", () => {
++    const result = prepareSource("Слово. ".repeat(10000));
++    expect(result.truncated).toBe(true);
++    expect(result.text.length).toBeLessThanOrEqual(MAX_SOURCE_CHARS);
++  });
++});
++
++describe("buildExtractionMessages", () => {
++  const messages = buildExtractionMessages("Хроники", SOURCE);
++
++  it("содержит правила против выдумки и гипотез", () => {
++    const system = messages[0]?.content ?? "";
++    expect(system).toContain("Ничего не добавляй");
++    expect(system).toContain("гипотезы");
++    expect(system).toContain("ТОЧНАЯ цитата");
++    expect(system).toContain("ambiguity");
++  });
++
++  it("передаёт название и исходный текст", () => {
++    const user = messages[1]?.content ?? "";
++    expect(user).toContain("Хроники");
++    expect(user).toContain("Империя Пепла основана");
++  });
++
++  it("схема ответа требует все поля у каждого факта", () => {
++    const item = EXTRACTION_JSON_SCHEMA.schema.properties.facts.items;
++    expect([...item.required].sort()).toEqual(
++      ["ambiguity", "category", "confidence", "evidenceQuote", "statement"].sort()
++    );
++  });
++});
++
++describe("parseExtractionResponse", () => {
++  const valid = JSON.stringify({ facts: [fact()] });
++
++  it("разбирает корректный JSON", () => {
++    const parsed = parseExtractionResponse(valid);
++    expect(parsed.ok).toBe(true);
++    if (parsed.ok) expect(parsed.facts).toHaveLength(1);
++  });
++
++  it("снимает обёртку ```json", () => {
++    expect(parseExtractionResponse("```json\n" + valid + "\n```").ok).toBe(true);
++  });
++
++  it("находит JSON внутри лишнего текста", () => {
++    expect(parseExtractionResponse(`Вот результат: ${valid} Готово.`).ok).toBe(true);
++  });
++
++  it("пустой ответ, не JSON и сломанный JSON дают понятную ошибку", () => {
++    for (const text of ["", "   ", "просто слова", '{"facts": [']) {
++      const parsed = parseExtractionResponse(text);
++      expect(parsed.ok).toBe(false);
++      if (!parsed.ok) expect(parsed.error.length).toBeGreaterThan(5);
++    }
++  });
++
++  it("отсутствие списка facts — ошибка", () => {
++    expect(parseExtractionResponse('{"items": []}').ok).toBe(false);
++    expect(parseExtractionResponse('{"facts": "нет"}').ok).toBe(false);
++  });
++
++  it("битые элементы пропускаются и считаются, остальные сохраняются", () => {
++    const parsed = parseExtractionResponse(
++      JSON.stringify({ facts: [fact(), { statement: 5 }, "мусор", fact({ statement: "Второй" })] })
++    );
++    expect(parsed.ok).toBe(true);
++    if (parsed.ok) {
++      expect(parsed.facts).toHaveLength(2);
++      expect(parsed.invalidItems).toBe(2);
++    }
++  });
++
++  it("пустой список фактов — не ошибка", () => {
++    const parsed = parseExtractionResponse('{"facts": []}');
++    expect(parsed.ok).toBe(true);
++  });
++});
++
++describe("verifyQuote: цитата должна буквально присутствовать в источнике", () => {
++  it("точная цитата принимается", () => {
++    expect(verifyQuote(SOURCE, "Империя Пепла основана императором Каэлем в 312 году.")).toBe(true);
++  });
++
++  it("допускается только различие в пробелах и переносах", () => {
++    expect(verifyQuote(SOURCE, "Столица империи —   Ривенхольм,\nгород у замёрзшего моря.")).toBe(true);
++  });
++
++  it("выдуманная, перефразированная или изменённая цитата отклоняется", () => {
++    expect(verifyQuote(SOURCE, "Империя Пепла была основана императором Каэлем")).toBe(false);
++    expect(verifyQuote(SOURCE, "Ривенхольм — столица империи Пепла")).toBe(false);
++    expect(verifyQuote(SOURCE, "Империя Пепла основана императором Марком в 312 году.")).toBe(false);
++  });
++
++  it("слишком короткая цитата ничего не доказывает", () => {
++    expect(verifyQuote(SOURCE, "города")).toBe(false);
++    expect(verifyQuote(SOURCE, "   ")).toBe(false);
++  });
++});
++
++describe("selectFacts", () => {
++  it("принимает факт с подтверждённой цитатой", () => {
++    const { accepted, skipped } = selectFacts([fact()], SOURCE, none);
++    expect(accepted).toHaveLength(1);
++    expect(skipped).toEqual([]);
++    expect(accepted[0]?.category).toBe("HISTORY");
++  });
++
++  it("отклоняет факт с цитатой, которой нет в источнике", () => {
++    const { accepted, skipped } = selectFacts(
++      [fact({ evidenceQuote: "Император Каэль правил сорок лет подряд." })],
++      SOURCE,
++      none
++    );
++    expect(accepted).toEqual([]);
++    expect(skipped[0]?.reason).toBe("quote_not_found");
++  });
++
++  it("отклоняет пустое утверждение", () => {
++    expect(selectFacts([fact({ statement: "   " })], SOURCE, none).skipped[0]?.reason).toBe(
++      "empty_statement"
++    );
++  });
++
++  it("повтор в одном ответе создаёт один факт", () => {
++    const { accepted, skipped } = selectFacts(
++      [fact(), fact({ statement: "империю  Пепла основал император каэль!" })],
++      SOURCE,
++      none
++    );
++    expect(accepted).toHaveLength(1);
++    expect(skipped[0]?.reason).toBe("duplicate_in_response");
++  });
++
++  it("не дублирует ожидающие, отклонённые и принятые в Canon факты", () => {
++    const key = normalizeStatement("Империю Пепла основал император Каэль");
++
++    expect(
++      selectFacts([fact()], SOURCE, { ...none, pending: new Set([key]) }).skipped[0]?.reason
++    ).toBe("duplicate_pending");
++    expect(
++      selectFacts([fact()], SOURCE, { ...none, rejected: new Set([key]) }).skipped[0]?.reason
++    ).toBe("previously_rejected");
++    expect(
++      selectFacts([fact()], SOURCE, { ...none, canon: new Set([key]) }).skipped[0]?.reason
++    ).toBe("already_canon");
++  });
++
++  it("количество фактов ограничено", () => {
++    const many = Array.from({ length: MAX_FACTS + 5 }, (_, i) =>
++      fact({ statement: `Факт номер ${i}` })
++    );
++    const { accepted, skipped } = selectFacts(many, SOURCE, none);
++    expect(accepted).toHaveLength(MAX_FACTS);
++    expect(skipped.filter((s) => s.reason === "limit_exceeded")).toHaveLength(5);
++  });
++
++  it("уверенность ограничивается диапазоном 0–1, неизвестная категория становится OTHER", () => {
++    const { accepted } = selectFacts(
++      [fact({ confidence: 7, category: "СТРАННАЯ" }), fact({ statement: "Второй", confidence: -3 })],
++      SOURCE,
++      none
++    );
++    expect(accepted[0]?.confidence).toBe(1);
++    expect(accepted[0]?.category).toBe("OTHER");
++    expect(accepted[1]?.confidence).toBe(0);
++  });
++
++  it("неоднозначность сохраняется, пустая становится null", () => {
++    const { accepted } = selectFacts(
++      [fact({ ambiguity: "Источник — слух" }), fact({ statement: "Второй", ambiguity: "  " })],
++      SOURCE,
++      none
++    );
++    expect(accepted[0]?.ambiguity).toBe("Источник — слух");
++    expect(accepted[1]?.ambiguity).toBeNull();
++  });
++});
++
++describe("схема payload LORE_FACT", () => {
++  const data = {
++    statement: "Империю Пепла основал император Каэль",
++    evidenceQuote: "Империя Пепла основана императором Каэлем в 312 году.",
++    confidence: 0.9,
++    category: "HISTORY",
++    ambiguity: null,
++    source: { type: "LORE_MATERIAL", materialId: "m1", materialTitle: "Хроники" },
++  };
++
++  it("принимает полный payload с происхождением", () => {
++    expect(loreFactPayloadSchema.safeParse({ entityType: "LORE_FACT", data }).success).toBe(true);
++  });
++
++  it("требует цитату и источник", () => {
++    expect(
++      loreFactPayloadSchema.safeParse({ entityType: "LORE_FACT", data: { ...data, evidenceQuote: "" } }).success
++    ).toBe(false);
++    expect(
++      loreFactPayloadSchema.safeParse({
++        entityType: "LORE_FACT",
++        data: { ...data, source: undefined },
++      }).success
++    ).toBe(false);
++  });
++
++  it("editedLoreStatement понимает обе формы и игнорирует пустое", () => {
++    expect(editedLoreStatement({ data: { statement: "  Новое  " } })).toBe("Новое");
++    expect(editedLoreStatement({ statement: "Другое" })).toBe("Другое");
++    expect(editedLoreStatement({ data: { statement: "   " } })).toBeNull();
++    expect(editedLoreStatement(null)).toBeNull();
++    expect(editedLoreStatement(undefined)).toBeNull();
++  });
++});
+diff --git a/story-architect/tests/lore-fact-apply.test.ts b/story-architect/tests/lore-fact-apply.test.ts
+new file mode 100644
+index 0000000..3a8c7af
+--- /dev/null
++++ b/story-architect/tests/lore-fact-apply.test.ts
+@@ -0,0 +1,250 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++/**
++ * Принятие, редактирование и отклонение предложений LORE_FACT через
++ * НАСТОЯЩУЮ функцию applyProposal.
++ *
++ * Важно: это НЕ тест на реальной базе данных. База заменена записывающей
++ * заглушкой; вся логика applyProposal, машина состояний предложений и
++ * проверка схем настоящие.
++ */
++
++const holder = vi.hoisted(() => ({ tx: null as unknown }));
++
++vi.mock("@prisma/client", () => ({
++  Prisma: { JsonNull: "__JsonNull__", DbNull: "__DbNull__" },
++  PrismaClient: class {
++    $transaction(callback: (tx: unknown) => unknown) {
++      return callback(holder.tx);
++    }
++  },
++}));
++
++import { authorActorFromSession } from "../src/lib/canon/actor";
++import { applyProposal } from "../src/lib/canon/write";
++
++type Call = { model: string; method: string; args: any };
++
++let calls: Call[] = [];
++let overrides: Record<string, (args: any) => unknown> = {};
++
++function makeTx() {
++  return new Proxy(
++    {},
++    {
++      get: (_target, model: string) =>
++        new Proxy(
++          {},
++          {
++            get:
++              (_models, method: string) =>
++              async (args: any): Promise<unknown> => {
++                calls.push({ model, method, args });
++
++                const override = overrides[`${model}.${method}`];
++                if (override) return override(args);
++
++                switch (method) {
++                  case "findMany":
++                    return [];
++                  case "findFirst":
++                  case "findUnique":
++                    return null;
++                  case "updateMany":
++                  case "deleteMany":
++                    return { count: 0 };
++                  default:
++                    return { id: `${model}-${calls.length}`, ...(args?.data ?? {}) };
++                }
++              },
++          }
++        ),
++    }
++  );
++}
++
++const QUOTE = "Империя Пепла основана императором Каэлем в 312 году.";
++
++const payload = {
++  entityType: "LORE_FACT",
++  data: {
++    statement: "Империю Пепла основал император Каэль",
++    evidenceQuote: QUOTE,
++    confidence: 0.9,
++    category: "HISTORY",
++    ambiguity: "Дата приблизительна",
++    source: { type: "LORE_MATERIAL", materialId: "m1", materialTitle: "Хроники" },
++  },
++};
++
++const author = authorActorFromSession({ user: { id: "user-1" } });
++
++function setup(
++  options: { status?: string; op?: string; payload?: unknown; existingFact?: boolean } = {}
++) {
++  calls = [];
++  overrides = {
++    "proposal.findUnique": () => ({
++      id: "prop-1",
++      projectId: "project-1",
++      entityType: "LORE_FACT",
++      op: options.op ?? "CREATE",
++      status: options.status ?? "PENDING",
++      payload: options.payload ?? payload,
++      aiRunId: null,
++      sourceChapterId: null,
++      project: { userId: "user-1" },
++    }),
++    "canonFact.findFirst": () => (options.existingFact ? { id: "fact-existing" } : null),
++  };
++  holder.tx = makeTx();
++}
++
++const created = (model: string) =>
++  calls.filter((c) => c.model === model && c.method === "create");
++
++beforeEach(() => setup());
++
++describe("принятие факта Lore Library", () => {
++  it("создаёт ровно один CanonFact с нужными полями", async () => {
++    const result = await applyProposal("prop-1", "ACCEPT", author);
++
++    const facts = created("canonFact");
++    expect(facts).toHaveLength(1);
++
++    const data = facts[0]?.args.data;
++    expect(data.statement).toBe("Империю Пепла основал император Каэль");
++    expect(data.status).toBe("CANON");
++    expect(data.factSource).toBe("AI_EXTRACTION");
++    expect(data.confidence).toBe(0.9);
++    expect(data.sourceProposalId).toBe("prop-1");
++    expect(data.projectId).toBe("project-1");
++
++    expect(result.canonChanged).toBe(true);
++    expect(result.canonEntityId).toBeTruthy();
++  });
++
++  it("предложение помечается принятым и связывается с созданным фактом", async () => {
++    await applyProposal("prop-1", "ACCEPT", author);
++
++    const update = calls.find((c) => c.model === "proposal" && c.method === "update");
++    expect(update?.args.data.status).toBe("ACCEPTED");
++    expect(update?.args.data.entityId).toBeTruthy();
++    expect(update?.args.data.reviewedById).toBe("user-1");
++  });
++
++  it("происхождение и цитата сохраняются в журнале изменений", async () => {
++    await applyProposal("prop-1", "ACCEPT", author);
++
++    const log = created("changeLog")[0]?.args.data;
++    expect(log.entityType).toBe("LORE_FACT");
++    expect(log.actorType).toBe("AUTHOR");
++    expect(log.proposalId).toBe("prop-1");
++    expect(log.after.data.evidenceQuote).toBe(QUOTE);
++    expect(log.after.data.source.materialId).toBe("m1");
++    expect(log.after.data.source.materialTitle).toBe("Хроники");
++  });
++
++  it("исходное предложение с цитатой и источником не изменяется", async () => {
++    await applyProposal("prop-1", "ACCEPT", author);
++
++    const update = calls.find((c) => c.model === "proposal" && c.method === "update");
++    // принятие без правки не переписывает payload предложения
++    expect(update?.args.data.editedPayload).toBeUndefined();
++    expect(payload.data.evidenceQuote).toBe(QUOTE);
++  });
++});
++
++describe("идемпотентность", () => {
++  it("повторное принятие уже принятого предложения отклоняется и не создаёт факт", async () => {
++    setup({ status: "ACCEPTED" });
++
++    await expect(applyProposal("prop-1", "ACCEPT", author)).rejects.toThrow();
++    expect(created("canonFact")).toHaveLength(0);
++  });
++
++  it("если факт для этого предложения уже есть, второй не создаётся", async () => {
++    setup({ existingFact: true });
++
++    const result = await applyProposal("prop-1", "ACCEPT", author);
++
++    expect(created("canonFact")).toHaveLength(0);
++    expect(result.canonEntityId).toBe("fact-existing");
++
++    const lookup = calls.find((c) => c.model === "canonFact" && c.method === "findFirst");
++    expect(lookup?.args.where).toEqual({
++      projectId: "project-1",
++      sourceProposalId: "prop-1",
++    });
++  });
++});
++
++describe("редактирование с принятием", () => {
++  it("используется отредактированное утверждение, цитата и происхождение исходные", async () => {
++    await applyProposal("prop-1", "EDIT_AND_ACCEPT", author, {
++      data: {
++        statement: "Империя Пепла возникла в 312 году",
++        evidenceQuote: "ПОДМЕНЁННАЯ ЦИТАТА, которой нет в источнике",
++        source: { type: "LORE_MATERIAL", materialId: "другой", materialTitle: "Подмена" },
++        confidence: 0.1,
++      },
++    });
++
++    const fact = created("canonFact")[0]?.args.data;
++    expect(fact.statement).toBe("Империя Пепла возникла в 312 году");
++    // уверенность берётся из исходного payload, а не из правки
++    expect(fact.confidence).toBe(0.9);
++
++    const update = calls.find((c) => c.model === "proposal" && c.method === "update");
++    const saved = update?.args.data.editedPayload;
++    expect(saved.data.statement).toBe("Империя Пепла возникла в 312 году");
++    expect(saved.data.evidenceQuote).toBe(QUOTE);
++    expect(saved.data.source.materialId).toBe("m1");
++    expect(saved.data.source.materialTitle).toBe("Хроники");
++  });
++
++  it("допускается правка в упрощённой форме { statement }", async () => {
++    await applyProposal("prop-1", "EDIT_AND_ACCEPT", author, { statement: "Короткая правка" });
++    expect(created("canonFact")[0]?.args.data.statement).toBe("Короткая правка");
++  });
++
++  it("пустое утверждение при правке отклоняется, факт не создаётся", async () => {
++    await expect(
++      applyProposal("prop-1", "EDIT_AND_ACCEPT", author, { data: { statement: "   " } })
++    ).rejects.toThrow();
++    expect(created("canonFact")).toHaveLength(0);
++  });
++});
++
++describe("отклонение и защита Canon", () => {
++  it("отклонение не создаёт CanonFact и не пишет в журнал Canon", async () => {
++    await applyProposal("prop-1", "REJECT", author);
++
++    expect(created("canonFact")).toHaveLength(0);
++    expect(created("changeLog").filter((c) => c.args.data.entityType === "LORE_FACT")).toHaveLength(0);
++
++    const update = calls.find((c) => c.model === "proposal" && c.method === "update");
++    expect(update?.args.data.status).toBe("REJECTED");
++  });
++
++  it("не-автор не может принять факт", async () => {
++    const notAuthor = { type: "AI", userId: "" } as unknown as typeof author;
++
++    await expect(applyProposal("prop-1", "ACCEPT", notAuthor)).rejects.toThrow();
++    expect(calls).toHaveLength(0);
++  });
++
++  it("повреждённый payload не создаёт факт", async () => {
++    setup({ payload: { entityType: "LORE_FACT", data: { statement: "без цитаты" } } });
++
++    await expect(applyProposal("prop-1", "ACCEPT", author)).rejects.toThrow();
++    expect(created("canonFact")).toHaveLength(0);
++  });
++
++  it("операция, отличная от CREATE, не поддерживается", async () => {
++    setup({ op: "UPDATE" });
++
++    await expect(applyProposal("prop-1", "ACCEPT", author)).rejects.toThrow();
++    expect(created("canonFact")).toHaveLength(0);
++  });
++});

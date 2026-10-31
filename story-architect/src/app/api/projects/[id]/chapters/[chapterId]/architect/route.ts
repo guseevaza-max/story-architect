@@ -1,21 +1,22 @@
+
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import {
   PrismaClient,
   AiRunStatus,
   ProposalOp,
 } from "@prisma/client";
 import { auth } from "@/auth";
+import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+import {
+  getOpenAIClient,
+  hasOpenAIKey,
+} from "@/lib/ai/provider";
 import {
   buildStoryStateWithStats,
   memoryChunksBefore,
 } from "@/lib/context/storyState";
 
 const prisma = new PrismaClient();
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(
   _request: Request,
@@ -113,43 +114,39 @@ export async function POST(
     // 5. OPENAI KEY
     // =====================================================
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!hasOpenAIKey()) {
       return NextResponse.json(
-        { error: "OPENAI_API_KEY не настроен" },
+        { error: "Провайдер OpenAI не настроен" },
         { status: 500 }
       );
     }
 
+    const openai = getOpenAIClient();
+
     // =====================================================
     // 6. CANON FACTS
-    //
     // Только подтверждённые факты.
     // =====================================================
 
-    const canonFacts =
-      await prisma.canonFact.findMany({
-        where: {
-          projectId: project.id,
-          status: "CANON",
-        },
-        select: {
-          statement: true,
-          negation: true,
-          entityType: true,
-          validFromChapter: true,
-          validToChapter: true,
-          importance: true,
-        },
-        orderBy: [
-          {
-            importance: "desc",
-          },
-          {
-            createdAt: "desc",
-          },
-        ],
-        take: 100,
-      });
+    const canonFacts = await prisma.canonFact.findMany({
+      where: {
+        projectId: project.id,
+        status: "CANON",
+      },
+      select: {
+        statement: true,
+        negation: true,
+        entityType: true,
+        validFromChapter: true,
+        validToChapter: true,
+        importance: true,
+      },
+      orderBy: [
+        { importance: "desc" },
+        { createdAt: "desc" },
+      ],
+      take: 100,
+    });
 
     const canonContext =
       canonFacts.length > 0
@@ -182,49 +179,48 @@ ${validity}`;
     // 7. ПРЕДЫДУЩЕЕ РЕЗЮМЕ
     // =====================================================
 
-    const previousChapter =
-      await prisma.chapter.findFirst({
-        where: {
-          bookId: chapter.bookId,
-          number: {
-            lt: chapter.number,
-          },
-          status: "CANON",
+    const previousChapter = await prisma.chapter.findFirst({
+      where: {
+        bookId: chapter.bookId,
+        number: {
+          lt: chapter.number,
         },
-        orderBy: {
-          number: "desc",
-        },
-        include: {
-          chapterSummary: true,
-        },
-      });
+        status: "CANON",
+      },
+      orderBy: {
+        number: "desc",
+      },
+      include: {
+        chapterSummary: true,
+      },
+    });
 
     const previousChapterSummary =
       previousChapter?.chapterSummary
         ? `
 Предыдущая глава:
+
 Глава ${previousChapter.number}. ${
-            previousChapter.title ||
-            "Без названия"
+            previousChapter.title || "Без названия"
           }
 
 Краткое резюме:
+
 ${previousChapter.chapterSummary.shortSummary}
 
 Подробное резюме:
+
 ${
-  previousChapter.chapterSummary
-    .fullSummary ||
+  previousChapter.chapterSummary.fullSummary ||
   "Нет подробного резюме."
 }
 
 Изменения мира:
+
 ${
-  previousChapter.chapterSummary
-    .worldDelta
+  previousChapter.chapterSummary.worldDelta
     ? JSON.stringify(
-        previousChapter.chapterSummary
-          .worldDelta,
+        previousChapter.chapterSummary.worldDelta,
         null,
         2
       )
@@ -235,12 +231,11 @@ ${
 
     // =====================================================
     // 8. MEMORY CHUNKS
-    //
     // Пока используем последние сохранённые chunks.
     // Семантический vector search подключим следующим этапом.
     // =====================================================
 
-    // Память только предыдущих глав: будущие главы в контекст не попадают.
+    // Будущие главы в контекст не попадают.
     const storyRef = {
       projectId: project.id,
       bookId: chapter.bookId,
@@ -248,20 +243,19 @@ ${
       chapterNumber: chapter.number,
     };
 
-    const memoryChunks =
-      await prisma.memoryChunk.findMany({
-        where: memoryChunksBefore(storyRef),
-        select: {
-          kind: true,
-          content: true,
-          metadata: true,
-          chapterId: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 30,
-      });
+    const memoryChunks = await prisma.memoryChunk.findMany({
+      where: memoryChunksBefore(storyRef),
+      select: {
+        kind: true,
+        content: true,
+        metadata: true,
+        chapterId: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 30,
+    });
 
     const memoryContext =
       memoryChunks.length > 0
@@ -271,18 +265,23 @@ ${
 ${chunk.content}
 ${
   chunk.metadata
-    ? `Metadata: ${JSON.stringify(
-        chunk.metadata
-      )}`
+    ? `Metadata: ${JSON.stringify(chunk.metadata)}`
     : ""
 }`;
             })
             .join("\n\n")
         : "Сохранённой долгосрочной памяти пока нет.";
 
-    // Накопленное состояние персонажей и отношений на начало главы.
+    // Накопленное состояние персонажей и отношений.
     const storyStats = await buildStoryStateWithStats(storyRef);
     const storyState = storyStats.text;
+
+    // Авторский замысел главы и референсы (пустая строка, если не заданы).
+    const authorBlock = await loadAuthorDirectionBlock(
+      project.id,
+      chapter.id,
+      "architect"
+    );
 
     // =====================================================
     // 9. SYSTEM PROMPT
@@ -309,7 +308,6 @@ AI предлагает структуру.
 ВАЖНО:
 
 CANON FACTS являются подтверждёнными фактами истории.
-
 MEMORY является контекстом истории.
 
 Предыдущая глава является подтверждённым контекстом
@@ -320,7 +318,6 @@ MEMORY является контекстом истории.
 не превращай её автоматически в Canon.
 
 Если информации недостаточно — укажи это явно.
-
 Не выдумывай недостающие факты.
 
 Если авторская идея конфликтует с Canon,
@@ -329,11 +326,8 @@ MEMORY является контекстом истории.
 и оставь решение автору.
 
 Architect НЕ изменяет Canon.
-
 Architect НЕ создаёт персонажей напрямую.
-
 Architect НЕ создаёт события напрямую.
-
 Architect создаёт только предложение плана главы.
 
 Верни только JSON согласно заданной схеме.
@@ -346,7 +340,6 @@ Architect создаёт только предложение плана глав
 2. initialState
 В каком состоянии история и персонажи находятся
 в начале главы.
-
 Используй предыдущую главу и Memory,
 если они доступны.
 
@@ -364,12 +357,10 @@ Architect создаёт только предложение плана глав
 
 7. mustNotHappen
 Что не должно произойти без явного решения автора.
-
 Особенно учитывай подтверждённые Canon Facts.
 
 8. openQuestions
 Что осталось неопределённым и требует решения автора.
-
 Не превращай вопросы в факты.
 `;
 
@@ -397,7 +388,6 @@ ${project.tone || "Не указан"}
 Правила проекта:
 ${project.projectRules || "Не указаны."}
 
-
 =====================================================
 BOOK
 =====================================================
@@ -414,15 +404,12 @@ ${chapter.book.mainArc || "Не указана"}
 Запланированный финал:
 ${chapter.book.plannedEnding || "Не указан."}
 
-
 =====================================================
 CURRENT CHAPTER
 =====================================================
 
 Глава:
-${chapter.number}. ${
-      chapter.title || "Без названия"
-    }
+${chapter.number}. ${chapter.title || "Без названия"}
 
 Назначение главы:
 ${chapter.purpose || "Не указано"}
@@ -430,13 +417,11 @@ ${chapter.purpose || "Не указано"}
 Идея автора:
 ${chapter.authorIdea}
 
-
 =====================================================
 CANON FACTS
 =====================================================
 
 ${canonContext}
-
 
 =====================================================
 PREVIOUS CHAPTER MEMORY
@@ -444,13 +429,11 @@ PREVIOUS CHAPTER MEMORY
 
 ${previousChapterSummary}
 
-
 =====================================================
 LONG-TERM MEMORY
 =====================================================
 
 ${memoryContext}
-
 
 =====================================================
 STORY STATE
@@ -458,8 +441,7 @@ STORY STATE
 не противоречь ему без явного основания в идее автора)
 =====================================================
 
-${storyState}
-
+${storyState}${authorBlock}
 
 =====================================================
 TASK
@@ -471,9 +453,7 @@ TASK
 как контекст для принятия структурных решений.
 
 Не пиши саму главу.
-
 Не изменяй Canon.
-
 Не создавай новые подтверждённые факты.
 
 Сформируй только предложение плана главы.
@@ -487,109 +467,90 @@ TASK
     // 11. OPENAI
     // =====================================================
 
-    const response =
-      await openai.chat.completions.create({
-        model: "gpt-5.6-luna",
-
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: userPrompt,
-          },
-        ],
-
-        response_format: {
-          type: "json_schema",
-
-          json_schema: {
-            name: "chapter_architect_plan",
-
-            strict: true,
-
-            schema: {
-              type: "object",
-
-              additionalProperties: false,
-
-              properties: {
-                chapterPurpose: {
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.6-luna",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "chapter_architect_plan",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              chapterPurpose: {
+                type: "string",
+              },
+              initialState: {
+                type: "string",
+              },
+              endState: {
+                type: "string",
+              },
+              plotDevelopment: {
+                type: "array",
+                items: {
                   type: "string",
-                },
-
-                initialState: {
-                  type: "string",
-                },
-
-                endState: {
-                  type: "string",
-                },
-
-                plotDevelopment: {
-                  type: "array",
-                  items: {
-                    type: "string",
-                  },
-                },
-
-                characterDevelopment: {
-                  type: "array",
-                  items: {
-                    type: "string",
-                  },
-                },
-
-                mustHappen: {
-                  type: "array",
-                  items: {
-                    type: "string",
-                  },
-                },
-
-                mustNotHappen: {
-                  type: "array",
-                  items: {
-                    type: "string",
-                  },
-                },
-
-                openQuestions: {
-                  type: "array",
-                  items: {
-                    type: "string",
-                  },
                 },
               },
-
-              required: [
-                "chapterPurpose",
-                "initialState",
-                "endState",
-                "plotDevelopment",
-                "characterDevelopment",
-                "mustHappen",
-                "mustNotHappen",
-                "openQuestions",
-              ],
+              characterDevelopment: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
+              },
+              mustHappen: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
+              },
+              mustNotHappen: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
+              },
+              openQuestions: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
+              },
             },
+            required: [
+              "chapterPurpose",
+              "initialState",
+              "endState",
+              "plotDevelopment",
+              "characterDevelopment",
+              "mustHappen",
+              "mustNotHappen",
+              "openQuestions",
+            ],
           },
         },
-      });
+      },
+    });
 
     // =====================================================
     // 12. AI OUTPUT
     // =====================================================
 
-    const rawContent =
-      response.choices[0]?.message?.content;
+    const rawContent = response.choices[0]?.message?.content;
 
     if (!rawContent) {
-      throw new Error(
-        "AI не вернул результат"
-      );
+      throw new Error("AI не вернул результат");
     }
 
     const plan = JSON.parse(rawContent);
@@ -598,134 +559,70 @@ TASK
     // 13. AI RUN
     // =====================================================
 
-    const durationMs =
-      Date.now() - startedAt;
-
+    const durationMs = Date.now() - startedAt;
     const usage = response.usage;
 
-    const aiRun =
-      await prisma.aiRun.create({
-        data: {
-          userId: session.user.id,
-
-          projectId: project.id,
-
-          roleKey:
-            "STORY_ARCHITECT",
-
-          model:
-            "gpt-5.6-luna",
-
-          inputTokens:
-            usage?.prompt_tokens ??
-            null,
-
-          outputTokens:
-            usage?.completion_tokens ??
-            null,
-
-          requestPayload: {
-            chapterId: chapter.id,
-
-            authorIdea:
-              chapter.authorIdea,
-
-            context: {
-              canonFactsCount:
-                canonFacts.length,
-
-              memoryChunksCount:
-                memoryChunks.length,
-
-              previousChapter:
-                previousChapter
-                  ? previousChapter.number
-                  : null,
-
-              storyStateCharacters:
-                storyStats.characters,
-
-              storyStateRelationships:
-                storyStats.relationships,
-            },
+    const aiRun = await prisma.aiRun.create({
+      data: {
+        userId: session.user.id,
+        projectId: project.id,
+        roleKey: "STORY_ARCHITECT",
+        model: "gpt-5.6-luna",
+        inputTokens: usage?.prompt_tokens ?? null,
+        outputTokens: usage?.completion_tokens ?? null,
+        requestPayload: {
+          chapterId: chapter.id,
+          authorIdea: chapter.authorIdea,
+          context: {
+            canonFactsCount: canonFacts.length,
+            memoryChunksCount: memoryChunks.length,
+            previousChapter: previousChapter
+              ? previousChapter.number
+              : null,
+            storyStateCharacters: storyStats.characters,
+            storyStateRelationships: storyStats.relationships,
           },
-
-          responsePayload: plan,
-
-          contextDebug: {
-            canonFacts:
-              canonFacts.length,
-
-            memoryChunks:
-              memoryChunks.length,
-
-            storyState: {
-              characters:
-                storyStats.characters,
-              states:
-                storyStats.states,
-              relationships:
-                storyStats.relationships,
-              chars:
-                storyState.length,
-            },
-
-            previousChapter:
-              previousChapter
-                ? previousChapter.number
-                : null,
-          },
-
-          durationMs,
-
-          status:
-            AiRunStatus.SUCCESS,
         },
-      });
+        responsePayload: plan,
+        contextDebug: {
+          canonFacts: canonFacts.length,
+          memoryChunks: memoryChunks.length,
+          storyState: {
+            characters: storyStats.characters,
+            states: storyStats.states,
+            relationships: storyStats.relationships,
+            chars: storyState.length,
+          },
+          previousChapter: previousChapter
+            ? previousChapter.number
+            : null,
+        },
+        durationMs,
+        status: AiRunStatus.SUCCESS,
+      },
+    });
 
     // =====================================================
     // 14. PROPOSAL
-    //
-    // AI НЕ ПИШЕТ PLAN В CHAPTER.
-    //
-    // Сначала Proposal.
-    // Автор потом принимает / редактирует / отклоняет.
+    // AI НЕ ЗАПИСЫВАЕТ PLAN НАПРЯМУЮ В CHAPTER.
+    // Автор принимает, редактирует или отклоняет предложение.
     // =====================================================
 
-    const proposal =
-      await prisma.proposal.create({
-        data: {
-          projectId:
-            project.id,
-
-          entityType:
-            "chapter_plan",
-
-          entityId:
-            chapter.id,
-
-          op:
-            ProposalOp.UPDATE,
-
-          payload:
-            plan,
-
-          reason:
-            "Architect сформировал предложение плана главы на основе идеи автора, Canon и Memory.",
-
-          confidence:
-            0.8,
-
-          safety:
-            "UNCERTAIN",
-
-          sourceChapterId:
-            chapter.id,
-
-          aiRunId:
-            aiRun.id,
-        },
-      });
+    const proposal = await prisma.proposal.create({
+      data: {
+        projectId: project.id,
+        entityType: "chapter_plan",
+        entityId: chapter.id,
+        op: ProposalOp.UPDATE,
+        payload: plan,
+        reason:
+          "Architect сформировал предложение плана главы на основе идеи автора, Canon и Memory.",
+        confidence: 0.8,
+        safety: "UNCERTAIN",
+        sourceChapterId: chapter.id,
+        aiRunId: aiRun.id,
+      },
+    });
 
     // =====================================================
     // 15. RESPONSE
@@ -733,42 +630,24 @@ TASK
 
     return NextResponse.json({
       ok: true,
-
       plan,
-
-      proposalId:
-        proposal.id,
-
-      aiRunId:
-        aiRun.id,
-
+      proposalId: proposal.id,
+      aiRunId: aiRun.id,
       context: {
-        canonFacts:
-          canonFacts.length,
-
-        memoryChunks:
-          memoryChunks.length,
-
+        canonFacts: canonFacts.length,
+        memoryChunks: memoryChunks.length,
         storyState: {
-          characters:
-            storyStats.characters,
-          states:
-            storyStats.states,
-          relationships:
-            storyStats.relationships,
+          characters: storyStats.characters,
+          states: storyStats.states,
+          relationships: storyStats.relationships,
         },
-
-        previousChapter:
-          previousChapter
-            ? previousChapter.number
-            : null,
+        previousChapter: previousChapter
+          ? previousChapter.number
+          : null,
       },
     });
   } catch (error) {
-    console.error(
-      "Architect error:",
-      error
-    );
+    console.error("Architect error:", error);
 
     return NextResponse.json(
       {

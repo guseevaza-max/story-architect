@@ -168,6 +168,48 @@ export default async function MemoryPage({
     groupedMemory[type].push(chunk);
   }
 
+  // Пункты Memory Update, которые AI пометил как неуверенные или
+  // конфликтующие: сохранены для решения автора, в Canon и в контекст
+  // генераторов не попадают.
+  const unconfirmedItems: {
+    chapterNumber: number | null;
+    type: string;
+    title: string;
+    content: string;
+    safety: string;
+  }[] = [];
+
+  for (const chunk of memoryChunks) {
+    const meta =
+      chunk.metadata && typeof chunk.metadata === "object"
+        ? (chunk.metadata as Record<string, unknown>)
+        : null;
+
+    if (meta?.source !== "MEMORY_UPDATE") continue;
+
+    const unconfirmed = meta.unconfirmed;
+    const pending =
+      unconfirmed && typeof unconfirmed === "object"
+        ? (unconfirmed as { updates?: unknown }).updates
+        : null;
+
+    if (!Array.isArray(pending)) continue;
+
+    for (const raw of pending) {
+      if (!raw || typeof raw !== "object") continue;
+
+      const item = raw as Record<string, unknown>;
+
+      unconfirmedItems.push({
+        chapterNumber: chunk.chapter?.number ?? null,
+        type: typeof item.type === "string" ? item.type : "FACT",
+        title: typeof item.title === "string" ? item.title : "(без названия)",
+        content: typeof item.content === "string" ? item.content : "",
+        safety: typeof item.safety === "string" ? item.safety : "UNCERTAIN",
+      });
+    }
+  }
+
   const orderedTypes = [
     "CHARACTER_CHANGE",
     "RELATIONSHIP_CHANGE",
@@ -390,6 +432,38 @@ export default async function MemoryPage({
       {/* =====================================================
           MEMORY
           ===================================================== */}
+
+      {unconfirmedItems.length > 0 && (
+        <section
+          style={{
+            border: "2px solid #e0b36a",
+            borderRadius: 12,
+            padding: 24,
+            marginBottom: 24,
+            background: "#fffaf0",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>⚠️ Ожидает вашего решения</h2>
+
+          <p style={{ color: "#666", lineHeight: 1.5 }}>
+            Эти пункты AI пометил как неуверенные или конфликтующие. Они
+            сохранены, но НЕ считаются подтверждённым Canon и не передаются
+            Architect, Writer и Continuity.
+          </p>
+
+          <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.7 }}>
+            {unconfirmedItems.map((item, index) => (
+              <li key={`${item.chapterNumber}-${index}`}>
+                {item.chapterNumber !== null
+                  ? `Глава ${item.chapterNumber} · `
+                  : ""}
+                [{typeLabels[item.type]?.title ?? item.type}] {item.title}
+                {item.content ? ` — ${item.content}` : ""} ({item.safety})
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section
         style={{

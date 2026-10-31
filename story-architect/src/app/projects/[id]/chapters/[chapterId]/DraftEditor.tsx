@@ -18,6 +18,34 @@ export default function DraftEditor({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const templates = [
+    {
+      title: "Свободные заметки",
+      text: "ЗАМЫСЕЛ И МЫСЛИ\n\nЧто происходит:\n\nЧто важно не забыть:\n\nВопросы к себе:\n",
+    },
+    {
+      title: "Шаблон сцены",
+      text: "СЦЕНА\n\nМесто и время:\n\nУчастники:\n\nЦель сцены:\n\nЧто происходит по шагам:\n1. \n2. \n3. \n\nЧто меняется к концу сцены:\n\nАтмосфера и ощущения:\n\nСвязь с лором и Canon:\n",
+    },
+    {
+      title: "Описание мира",
+      text: "ЗАМЕТКА О МИРЕ\n\nОбъект / место / государство:\n\nОписание:\n\nТехнологии и материалы:\n\nКультура и быт:\n\nК какому месту и периоду относится:\n\nИсточник или основание факта:\n\nСтатус: требует проверки автором\n",
+    },
+    {
+      title: "Диалог",
+      text: "ДИАЛОГ\n\nМесто и ситуация:\n\nУчастники и их цели:\n\n— Реплика персонажа.\n— Ответ.\n\nЧто персонажи не говорят прямо:\n\nЧто меняется после разговора:\n",
+    },
+  ];
+
+  function insertTemplate(template: string) {
+    setText((current) =>
+      current.trim()
+        ? current.replace(/\s*$/, "") + "\n\n" + template
+        : template
+    );
+    setSaved(false);
+    setError("");
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -63,6 +91,31 @@ export default function DraftEditor({
 
   return (
     <div>
+      <div style={{ marginBottom: 14, padding: 14, border: "1px solid #ddd", borderRadius: 10, background: "#fafafa" }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Шаблоны черновика</div>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: "#666", lineHeight: 1.5 }}>
+          Выбирай подходящую болванку или просто пиши как удобно. Шаблон добавляется в конец текста и не удаляет уже написанное.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {templates.map((template) => (
+            <button
+              key={template.title}
+              type="button"
+              onClick={() => insertTemplate(template.text)}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid #ccc",
+                borderRadius: 8,
+                background: "#fff",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              + {template.title}
+            </button>
+          ))}
+        </div>
+      </div>
       <textarea
         value={text}
         onChange={(event) => {

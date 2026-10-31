@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
 import { buildStoryState } from "@/lib/context/storyState";
-import OpenAI from "openai";
+import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 
 const prisma = new PrismaClient();
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(
   request: Request,
   {
-    params,
+params,
   }: {
     params: Promise<{
       id: string;
@@ -21,8 +18,16 @@ export async function POST(
     }>;
   }
 ) {
-  try {
-    const session = await auth();
+    if (!hasOpenAIKey()) {
+    return NextResponse.json(
+      { error: "Провайдер OpenAI не настроен" },
+      { status: 500 }
+    );
+  }
+
+  const openai = getOpenAIClient();
+
+  try {    const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -80,14 +85,6 @@ export async function POST(
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        {
-          error: "OPENAI_API_KEY не настроен.",
-        },
-        { status: 500 }
-      );
-    }
 
     const chapterPlan = chapter.plan;
 
@@ -97,6 +94,13 @@ export async function POST(
       bookNumber: chapter.book.number,
       chapterNumber: chapter.number,
     });
+
+    // Авторский замысел главы и референсы (пустая строка, если не заданы).
+    const authorBlock = await loadAuthorDirectionBlock(
+      project.id,
+      chapter.id,
+      "scene_planner"
+    );
 
     const response = await openai.responses.create({
       model: "gpt-5.6-luna",
@@ -158,7 +162,7 @@ ${chapter.authorIdea || "Не указана"}
 
 Состояние истории на начало главы:
 
-${storyState}
+${storyState}${authorBlock}
 
 Утверждённый план главы:
 

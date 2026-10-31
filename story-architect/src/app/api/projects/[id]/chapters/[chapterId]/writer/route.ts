@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
+import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+import { splitAuthorNotes } from "@/lib/authorIntent/prompt";
 import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 
 export async function POST(
   request: Request,
   {
-    params,
+params,
   }: {
     params: Promise<{
       id: string;
@@ -19,8 +17,16 @@ export async function POST(
     }>;
   }
 ) {
-  try {
-    const session = await auth();
+    if (!hasOpenAIKey()) {
+    return NextResponse.json(
+      { error: "Провайдер OpenAI не настроен" },
+      { status: 500 }
+    );
+  }
+
+  const openai = getOpenAIClient();
+
+  try {    const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -75,12 +81,6 @@ export async function POST(
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY не настроен." },
-        { status: 500 }
-      );
-    }
 
     const storyRef = {
       projectId: project.id,
@@ -89,7 +89,7 @@ export async function POST(
       chapterNumber: chapter.number,
     };
 
-    const [canonFacts, previousChapter, memoryChunks, storyState] =
+    const [canonFacts, previousChapter, memoryChunks, storyState, authorBlock] =
       await Promise.all([
       prisma.canonFact.findMany({
         where: {
@@ -138,6 +138,9 @@ export async function POST(
       }),
 
       buildStoryState(storyRef),
+
+      // Авторский замысел главы и референсы (пустая строка, если не заданы).
+      loadAuthorDirectionBlock(project.id, chapter.id, "writer"),
     ]);
 
     const canonContext = canonFacts.length
@@ -210,7 +213,7 @@ CANON FACTS:
 ${canonContext}
 
 СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ (персонажи и отношения, не противоречь):
-${storyState}
+${storyState}${authorBlock}
 
 ПРЕДЫДУЩАЯ ГЛАВА:
 ${previousChapterSummary}
@@ -231,14 +234,16 @@ ${JSON.stringify(scenes, null, 2)}
       text: { format: { type: "text" } },
     });
 
-    const draftText = response.output_text?.trim();
-
-    if (!draftText) {
+    const rawDraft = response.output_text?.trim(); if (!rawDraft) {
       return NextResponse.json(
         { error: "AI не вернул текст черновика." },
         { status: 500 }
       );
     }
+
+    // Раздел «Замечания для автора» (конфликт замысла с Canon) не попадает
+    // в текст главы, а возвращается отдельно.
+    const { text: draftText, notes: authorNotes } = splitAuthorNotes(rawDraft);
 
     const wordCount = draftText.split(/\s+/).filter(Boolean).length;
 
@@ -252,6 +257,7 @@ ${JSON.stringify(scenes, null, 2)}
       chapterId: updatedChapter.id,
       draftText,
       wordCount,
+      authorNotes,
     });
   } catch (error) {
     console.error("Writer error:", error);

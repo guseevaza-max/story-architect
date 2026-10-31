@@ -33,6 +33,7 @@ describe("buildProposalDrafts: преобразование категорий",
       "worldRules:WORLD_RULE",
       "events:EVENT",
       "plotLines:PLOT_LINE",
+      "openQuestions:OPEN_QUESTION",
     ]);
   });
 
@@ -52,13 +53,15 @@ describe("buildProposalDrafts: преобразование категорий",
     }
   });
 
-  it("отношения, секреты, факты и вопросы не создают предложений", () => {
+  it("отношения, секреты и факты не создают предложений; вопросы создают", () => {
     expect(drafts.some((d) => d.name.includes("Горан скрывает"))).toBe(false);
+    expect(drafts.some((d) => d.name.includes("Мира доверяет"))).toBe(false);
+    expect(drafts.some((d) => d.entityType === "OPEN_QUESTION")).toBe(true);
     expect(notMapped).toEqual({
       facts: 1,
       relationships: 1,
       secrets: 1,
-      openQuestions: 1,
+      openQuestions: 0,
     });
   });
 

@@ -68,6 +68,7 @@ const ENTITY_TYPES: DraftEntityType[] = [
   "WORLD_RULE",
   "PLOT_LINE",
   "EVENT",
+  "OPEN_QUESTION",
 ];
 
 function nameFromPayload(payload: unknown): string | null {
@@ -77,7 +78,8 @@ function nameFromPayload(payload: unknown): string | null {
 
   if (!data || typeof data !== "object") return null;
 
-  const name = (data as { name?: unknown }).name;
+  const record = data as { name?: unknown; question?: unknown };
+  const name = record.name ?? record.question;
 
   return typeof name === "string" && name.trim() ? name : null;
 }
@@ -118,8 +120,15 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     // Что уже есть в проекте: Canon, ожидающие и отклонённые предложения.
-    const [characters, worldEntities, worldRules, plotLines, events, proposals] =
-      await Promise.all([
+    const [
+      characters,
+      worldEntities,
+      worldRules,
+      plotLines,
+      events,
+      openQuestions,
+      proposals,
+    ] = await Promise.all([
         prisma.character.findMany({
           where: { projectId: project.id, status: "CANON" },
           select: { name: true },
@@ -139,6 +148,10 @@ export async function POST(request: Request, { params }: RouteContext) {
         prisma.event.findMany({
           where: { projectId: project.id, status: "CANON" },
           select: { name: true },
+        }),
+        prisma.openQuestion.findMany({
+          where: { projectId: project.id, status: { not: "REJECTED" } },
+          select: { question: true },
         }),
         prisma.proposal.findMany({
           where: {
@@ -164,6 +177,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     addAll("WORLD_RULE", worldRules);
     addAll("PLOT_LINE", plotLines);
     addAll("EVENT", events);
+
+    openQuestions.forEach((row) =>
+      existing.canon.OPEN_QUESTION.add(normalizeName(row.question))
+    );
 
     for (const proposal of proposals) {
       const name = nameFromPayload(proposal.payload);

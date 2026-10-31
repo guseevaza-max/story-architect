@@ -1,0 +1,1865 @@
+diff --git a/story-architect/prisma/migrations/0003_author_direction/migration.sql b/story-architect/prisma/migrations/0003_author_direction/migration.sql
+new file mode 100644
+index 0000000..f8729fe
+--- /dev/null
++++ b/story-architect/prisma/migrations/0003_author_direction/migration.sql
+@@ -0,0 +1,5 @@
++-- Авторский замысел главы и библиотека референсов проекта.
++-- Только добавление двух необязательных колонок: существующие данные не затрагиваются.
++-- IF NOT EXISTS делает миграцию безопасной при повторном запуске.
++ALTER TABLE "Chapter" ADD COLUMN IF NOT EXISTS "authorIntent" JSONB;
++ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "authorReferences" JSONB;
+diff --git a/story-architect/prisma/schema.prisma b/story-architect/prisma/schema.prisma
+index ab43b0f..9fbc0cf 100644
+--- a/story-architect/prisma/schema.prisma
++++ b/story-architect/prisma/schema.prisma
+@@ -171,6 +171,9 @@ model Project {
+   storyBibleText      String?
+   storyBibleUpdatedAt DateTime?
+ 
++  // библиотека авторских референсов проекта (массив; схема в lib/authorIntent)
++  authorReferences Json?
++
+   books          Book[]
+   characters     Character[]
+   plotLines      PlotLine[]
+@@ -227,6 +230,10 @@ model Chapter {
+   // исходная идея автора обычным языком
+   authorIdea String?
+ 
++  // авторский замысел главы: масштаб, драматичность, темп, референсы, промпт;
++  // структура проверяется zod-схемой src/lib/authorIntent/schema.ts
++  authorIntent Json?
++
+   // утверждённый план (structured output STORY ARCHITECT)
+   plan         Json?
+   planApproved Boolean @default(false)
+diff --git a/story-architect/scripts/apply-author-direction-columns.ts b/story-architect/scripts/apply-author-direction-columns.ts
+new file mode 100644
+index 0000000..b6c9df8
+--- /dev/null
++++ b/story-architect/scripts/apply-author-direction-columns.ts
+@@ -0,0 +1,53 @@
++/**
++ * Безопасно добавляет две необязательные колонки для авторского замысла:
++ *   Chapter.authorIntent и Project.authorReferences.
++ *
++ * Только ДОБАВЛЕНИЕ колонок (IF NOT EXISTS): существующие данные не меняются
++ * и не удаляются, повторный запуск ничего не ломает.
++ *
++ * Запуск (из папки story-architect), ДО `npx prisma generate`:
++ *   npx tsx scripts/apply-author-direction-columns.ts
++ * Если пишет, что не найден DATABASE_URL:
++ *   npx tsx --env-file=.env scripts/apply-author-direction-columns.ts
++ */
++import { PrismaClient } from "@prisma/client";
++
++const prisma = new PrismaClient();
++
++async function main() {
++  await prisma.$executeRawUnsafe(
++    'ALTER TABLE "Chapter" ADD COLUMN IF NOT EXISTS "authorIntent" JSONB'
++  );
++
++  await prisma.$executeRawUnsafe(
++    'ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "authorReferences" JSONB'
++  );
++
++  const rows = await prisma.$queryRawUnsafe<
++    { table_name: string; column_name: string }[]
++  >(
++    `SELECT table_name, column_name FROM information_schema.columns
++     WHERE (table_name = 'Chapter' AND column_name = 'authorIntent')
++        OR (table_name = 'Project' AND column_name = 'authorReferences')
++     ORDER BY table_name`
++  );
++
++  const found = rows.map((row) => `${row.table_name}.${row.column_name}`);
++
++  console.log("Найдены колонки:", found.join(", ") || "нет");
++
++  if (found.length !== 2) {
++    throw new Error("Ожидалось 2 колонки, проверьте подключение к базе.");
++  }
++
++  console.log("Готово. Данные не менялись.");
++}
++
++main()
++  .catch((error) => {
++    console.error("Ошибка:", error);
++    process.exitCode = 1;
++  })
++  .finally(async () => {
++    await prisma.$disconnect();
++  });
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts
+index a078686..ba4f564 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts
+@@ -6,6 +6,7 @@ import {
+   ProposalOp,
+ } from "@prisma/client";
+ import { auth } from "@/auth";
++import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+ import {
+   buildStoryStateWithStats,
+   memoryChunksBefore,
+@@ -280,6 +281,13 @@ ${
+     const storyStats = await buildStoryStateWithStats(storyRef);
+     const storyState = storyStats.text;
+ 
++    // Авторский замысел главы и референсы (пустая строка, если не заданы).
++    const authorBlock = await loadAuthorDirectionBlock(
++      project.id,
++      chapter.id,
++      "architect"
++    );
++
+     // =====================================================
+     // 9. SYSTEM PROMPT
+     // =====================================================
+@@ -454,7 +462,7 @@ STORY STATE
+ не противоречь ему без явного основания в идее автора)
+ =====================================================
+ 
+-${storyState}
++${storyState}${authorBlock}
+ 
+ 
+ =====================================================
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts
+index 1e9f8be..13ede2b 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts
+@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
+ import { Prisma } from "@prisma/client";
+ import { prisma } from "@/lib/db";
+ import { auth } from "@/auth";
++import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+ import { buildStoryState } from "@/lib/context/storyState";
+ import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+@@ -279,6 +280,13 @@ FAIL:
+       chapterNumber: chapter.number,
+     });
+ 
++    // Только принцип: художественные предпочтения автора не являются фактами.
++    const authorBlock = await loadAuthorDirectionBlock(
++      project.id,
++      chapter.id,
++      "continuity"
++    );
++
+     const userPrompt = `
+ ПРОЕКТ:
+ ${project.name}
+@@ -300,7 +308,7 @@ ${scenes || "План сцен отсутствует."}
+ 
+ ПОДТВЕРЖДЁННОЕ СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ
+ (персонажи и отношения; проверь, не противоречит ли ему черновик):
+-${storyState}
++${storyState}${authorBlock}
+ 
+ ЧЕРНОВИК ГЛАВЫ:
+ ${chapter.draftText}
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/intent/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/intent/route.ts
+new file mode 100644
+index 0000000..2dcddf7
+--- /dev/null
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/intent/route.ts
+@@ -0,0 +1,127 @@
++import { NextResponse } from "next/server";
++import { Prisma } from "@prisma/client";
++import { auth } from "@/auth";
++import { prisma } from "@/lib/db";
++import {
++  authorIntentSchema,
++  normalizeIntent,
++  normalizeReferences,
++} from "@/lib/authorIntent/schema";
++
++type RouteContext = {
++  params: Promise<{ id: string; chapterId: string }>;
++};
++
++async function loadChapter(
++  projectId: string,
++  chapterId: string,
++  userId: string
++) {
++  const project = await prisma.project.findFirst({
++    where: { id: projectId, userId },
++    select: { id: true, authorReferences: true },
++  });
++
++  if (!project) return null;
++
++  const chapter = await prisma.chapter.findFirst({
++    where: { id: chapterId, book: { projectId: project.id } },
++    select: { id: true, authorIntent: true },
++  });
++
++  return chapter ? { project, chapter } : null;
++}
++
++/** Авторский замысел главы и библиотека референсов для выбора. */
++export async function GET(_request: Request, { params }: RouteContext) {
++  try {
++    const session = await auth();
++
++    if (!session?.user?.id) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++
++    const { id, chapterId } = await params;
++    const found = await loadChapter(id, chapterId, session.user.id);
++
++    if (!found) {
++      return NextResponse.json({ error: "Глава не найдена" }, { status: 404 });
++    }
++
++    return NextResponse.json({
++      intent: normalizeIntent(found.chapter.authorIntent),
++      references: normalizeReferences(found.project.authorReferences),
++    });
++  } catch (error) {
++    console.error("Author intent load error:", error);
++
++    return NextResponse.json(
++      { error: "Не удалось загрузить авторский замысел." },
++      { status: 500 }
++    );
++  }
++}
++
++/** Сохраняет замысел главы. Canon и другие главы не затрагивает. */
++export async function PUT(request: Request, { params }: RouteContext) {
++  try {
++    const session = await auth();
++
++    if (!session?.user?.id) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++
++    const { id, chapterId } = await params;
++    const found = await loadChapter(id, chapterId, session.user.id);
++
++    if (!found) {
++      return NextResponse.json({ error: "Глава не найдена" }, { status: 404 });
++    }
++
++    const body: unknown = await request.json().catch(() => null);
++    const raw =
++      body && typeof body === "object"
++        ? (body as { intent?: unknown }).intent
++        : undefined;
++
++    const parsed = authorIntentSchema.safeParse(raw ?? {});
++
++    if (!parsed.success) {
++      return NextResponse.json(
++        { error: "Некорректные данные замысла." },
++        { status: 400 }
++      );
++    }
++
++    const intent = normalizeIntent(parsed.data);
++
++    // Неизвестные идентификаторы референсов отбрасываем.
++    if (intent && Array.isArray(intent.referenceIds)) {
++      const known = new Set(
++        normalizeReferences(found.project.authorReferences).map((r) => r.id)
++      );
++
++      intent.referenceIds = intent.referenceIds.filter((refId) =>
++        known.has(refId)
++      );
++    }
++
++    await prisma.chapter.update({
++      where: { id: found.chapter.id },
++      data: {
++        authorIntent: intent
++          ? (intent as unknown as Prisma.InputJsonValue)
++          : Prisma.DbNull,
++      },
++    });
++
++    return NextResponse.json({ ok: true, intent });
++  } catch (error) {
++    console.error("Author intent save error:", error);
++
++    return NextResponse.json(
++      { error: "Не удалось сохранить авторский замысел." },
++      { status: 500 }
++    );
++  }
++}
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts
+index 95f5f53..d2a8f7f 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts
+@@ -1,6 +1,7 @@
+ import { NextResponse } from "next/server";
+ import { PrismaClient } from "@prisma/client";
+ import { auth } from "@/auth";
++import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+ import { buildStoryState } from "@/lib/context/storyState";
+ import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+@@ -94,6 +95,13 @@ export async function POST(
+       chapterNumber: chapter.number,
+     });
+ 
++    // Авторский замысел главы и референсы (пустая строка, если не заданы).
++    const authorBlock = await loadAuthorDirectionBlock(
++      project.id,
++      chapter.id,
++      "scene_planner"
++    );
++
+     const response = await getOpenAIClient().responses.create({
+       model: "gpt-5.6-luna",
+ 
+@@ -154,7 +162,7 @@ ${chapter.authorIdea || "Не указана"}
+ 
+ Состояние истории на начало главы:
+ 
+-${storyState}
++${storyState}${authorBlock}
+ 
+ Утверждённый план главы:
+ 
+diff --git a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts
+index b34f211..7c2e65b 100644
+--- a/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts
++++ b/story-architect/src/app/api/projects/[id]/chapters/[chapterId]/writer/route.ts
+@@ -1,6 +1,8 @@
+ import { NextResponse } from "next/server";
+ import { prisma } from "@/lib/db";
+ import { auth } from "@/auth";
++import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
++import { splitAuthorNotes } from "@/lib/authorIntent/prompt";
+ import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
+ import { AI_NOT_CONFIGURED_MESSAGE, getOpenAIClient, isOpenAIConfigured } from "@/lib/ai/provider";
+ 
+@@ -85,7 +87,7 @@ export async function POST(
+       chapterNumber: chapter.number,
+     };
+ 
+-    const [canonFacts, previousChapter, memoryChunks, storyState] =
++    const [canonFacts, previousChapter, memoryChunks, storyState, authorBlock] =
+       await Promise.all([
+       prisma.canonFact.findMany({
+         where: {
+@@ -134,6 +136,9 @@ export async function POST(
+       }),
+ 
+       buildStoryState(storyRef),
++
++      // Авторский замысел главы и референсы (пустая строка, если не заданы).
++      loadAuthorDirectionBlock(project.id, chapter.id, "writer"),
+     ]);
+ 
+     const canonContext = canonFacts.length
+@@ -206,7 +211,7 @@ CANON FACTS:
+ ${canonContext}
+ 
+ СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ (персонажи и отношения, не противоречь):
+-${storyState}
++${storyState}${authorBlock}
+ 
+ ПРЕДЫДУЩАЯ ГЛАВА:
+ ${previousChapterSummary}
+@@ -227,15 +232,17 @@ ${JSON.stringify(scenes, null, 2)}
+       text: { format: { type: "text" } },
+     });
+ 
+-    const draftText = response.output_text?.trim();
+-
+-    if (!draftText) {
++    const rawDraft = response.output_text?.trim(); if (!rawDraft) {
+       return NextResponse.json(
+         { error: "AI не вернул текст черновика." },
+         { status: 500 }
+       );
+     }
+ 
++    // Раздел «Замечания для автора» (конфликт замысла с Canon) не попадает
++    // в текст главы, а возвращается отдельно.
++    const { text: draftText, notes: authorNotes } = splitAuthorNotes(rawDraft);
++
+     const wordCount = draftText.split(/\s+/).filter(Boolean).length;
+ 
+     const updatedChapter = await prisma.chapter.update({
+@@ -248,6 +255,7 @@ ${JSON.stringify(scenes, null, 2)}
+       chapterId: updatedChapter.id,
+       draftText,
+       wordCount,
++      authorNotes,
+     });
+   } catch (error) {
+     console.error("Writer error:", error);
+diff --git a/story-architect/src/app/api/projects/[id]/references/route.ts b/story-architect/src/app/api/projects/[id]/references/route.ts
+new file mode 100644
+index 0000000..d848b80
+--- /dev/null
++++ b/story-architect/src/app/api/projects/[id]/references/route.ts
+@@ -0,0 +1,108 @@
++import { randomUUID } from "node:crypto";
++import { NextResponse } from "next/server";
++import { Prisma } from "@prisma/client";
++import { auth } from "@/auth";
++import { prisma } from "@/lib/db";
++import {
++  normalizeReferences,
++  referenceLibraryInputSchema,
++  type AuthorReference,
++} from "@/lib/authorIntent/schema";
++
++type RouteContext = {
++  params: Promise<{ id: string }>;
++};
++
++async function loadProject(id: string, userId: string) {
++  return prisma.project.findFirst({
++    where: { id, userId },
++    select: { id: true, authorReferences: true },
++  });
++}
++
++/** Библиотека авторских референсов проекта. */
++export async function GET(_request: Request, { params }: RouteContext) {
++  try {
++    const session = await auth();
++
++    if (!session?.user?.id) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++
++    const { id } = await params;
++    const project = await loadProject(id, session.user.id);
++
++    if (!project) {
++      return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
++    }
++
++    return NextResponse.json({
++      references: normalizeReferences(project.authorReferences),
++    });
++  } catch (error) {
++    console.error("References load error:", error);
++
++    return NextResponse.json(
++      { error: "Не удалось загрузить референсы." },
++      { status: 500 }
++    );
++  }
++}
++
++/** Сохраняет библиотеку целиком. Canon не затрагивает. */
++export async function PUT(request: Request, { params }: RouteContext) {
++  try {
++    const session = await auth();
++
++    if (!session?.user?.id) {
++      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++    }
++
++    const { id } = await params;
++    const project = await loadProject(id, session.user.id);
++
++    if (!project) {
++      return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
++    }
++
++    const body: unknown = await request.json().catch(() => null);
++    const raw =
++      body && typeof body === "object"
++        ? (body as { references?: unknown }).references
++        : undefined;
++
++    const parsed = referenceLibraryInputSchema.safeParse(raw);
++
++    if (!parsed.success) {
++      return NextResponse.json(
++        { error: "Некорректные данные референсов." },
++        { status: 400 }
++      );
++    }
++
++    // Идентификаторы выдаёт сервер, дубликаты не допускаются.
++    const seen = new Set<string>();
++    const references: AuthorReference[] = parsed.data.map((item) => {
++      let referenceId = item.id ?? randomUUID();
++
++      if (seen.has(referenceId)) referenceId = randomUUID();
++      seen.add(referenceId);
++
++      return { ...item, id: referenceId };
++    });
++
++    await prisma.project.update({
++      where: { id: project.id },
++      data: { authorReferences: references as unknown as Prisma.InputJsonValue },
++    });
++
++    return NextResponse.json({ ok: true, references });
++  } catch (error) {
++    console.error("References save error:", error);
++
++    return NextResponse.json(
++      { error: "Не удалось сохранить референсы." },
++      { status: 500 }
++    );
++  }
++}
+diff --git a/story-architect/src/lib/authorIntent/load.ts b/story-architect/src/lib/authorIntent/load.ts
+new file mode 100644
+index 0000000..f03f947
+--- /dev/null
++++ b/story-architect/src/lib/authorIntent/load.ts
+@@ -0,0 +1,38 @@
++import { prisma } from "@/lib/db";
++import { buildAuthorDirectionBlock, type DirectionRole } from "./prompt";
++import {
++  normalizeIntent,
++  normalizeReferences,
++  resolveReferences,
++} from "./schema";
++
++/**
++ * Загружает замысел главы и библиотеку референсов проекта и собирает блок
++ * для промпта. Пустая строка, если у главы нет замысла и нет референсов,
++ * применяемых по умолчанию. Только чтение; ошибки не скрываются, чтобы
++ * генерация не шла молча без замысла автора.
++ */
++export async function loadAuthorDirectionBlock(
++  projectId: string,
++  chapterId: string,
++  role: DirectionRole
++): Promise<string> {
++  const [chapter, project] = await Promise.all([
++    prisma.chapter.findFirst({
++      where: { id: chapterId, book: { projectId } },
++      select: { authorIntent: true },
++    }),
++    prisma.project.findFirst({
++      where: { id: projectId },
++      select: { authorReferences: true },
++    }),
++  ]);
++
++  const intent = normalizeIntent(chapter?.authorIntent);
++  const references = resolveReferences(
++    intent,
++    normalizeReferences(project?.authorReferences)
++  );
++
++  return buildAuthorDirectionBlock({ intent, references, role });
++}
+diff --git a/story-architect/src/lib/authorIntent/prompt.ts b/story-architect/src/lib/authorIntent/prompt.ts
+new file mode 100644
+index 0000000..50c37e4
+--- /dev/null
++++ b/story-architect/src/lib/authorIntent/prompt.ts
+@@ -0,0 +1,148 @@
++/**
++ * Сборка блока «Авторский замысел» для промптов Architect, Scene Planner,
++ * Writer и Continuity. Чистая логика без базы данных.
++ *
++ * Главное правило: если ни замысел, ни применяемые референсы не заданы,
++ * блок пустой строкой — поведение генерации остаётся прежним.
++ */
++import {
++  LABELS,
++  hasIntentContent,
++  type AuthorIntent,
++  type AuthorReference,
++} from "./schema";
++
++export type DirectionRole =
++  | "architect"
++  | "scene_planner"
++  | "writer"
++  | "continuity";
++
++/** Разделитель раздела замечаний, который Writer добавляет при конфликте. */
++export const AUTHOR_NOTES_MARKER = "=== ЗАМЕЧАНИЯ ДЛЯ АВТОРА ===";
++
++const HIERARCHY = `ИЕРАРХИЯ ИНСТРУКЦИЙ (при конфликте выше пункт важнее):
++1. Системные ограничения и защита Canon.
++2. Подтверждённые факты истории.
++3. Утверждённый план главы и план сцен.
++4. Авторский замысел этой главы.
++5. Выбранные референсы и общие авторские предпочтения.
++6. Общие настройки генерации.
++Замысел определяет только художественное исполнение. Он не разрешает менять утверждённые события, характеры и факты мира. Не придумывай новые важные факты ради эффекта.`;
++
++const ROLE_RULES: Record<DirectionRole, string> = {
++  architect: `КАК ИСПОЛЬЗОВАТЬ ЗАМЫСЕЛ (Architect):
++Отрази масштаб, драматургию, темп и акценты автора в plotDevelopment, characterDevelopment и mustHappen. Не подменяй идею автора собственным видением.
++Если замысел противоречит Canon или подтверждённому состоянию истории, следуй Canon и добавь в openQuestions пункт, начинающийся словами «Конфликт замысла:».`,
++
++  scene_planner: `КАК ИСПОЛЬЗОВАТЬ ЗАМЫСЕЛ (Scene Planner):
++Распредели замысел по сценам: где нарастает напряжение, где нужны паузы, где происходят поворотные события и где находится эмоциональный пик. Отрази это в purpose, plan и plannedOutcome сцен. Не меняй утверждённый план главы.
++Если замысел противоречит Canon или плану главы, следуй им и добавь в openQuestions пункт, начинающийся словами «Конфликт замысла:».`,
++
++  writer: `КАК ИСПОЛЬЗОВАТЬ ЗАМЫСЕЛ (Writer):
++Следуй авторскому видению при написании текста: ритм, масштаб, эмоциональную траекторию и акценты. Применяй приёмы из референсов, не копируя чужие тексты и манеру дословно.
++Если выполнить замысел можно только нарушив Canon, подтверждённое состояние истории или утверждённые планы, следуй им, а в самом конце ответа добавь отдельный раздел: строка ${AUTHOR_NOTES_MARKER}, затем краткое описание конфликта. Этот раздел не является частью художественного текста.`,
++
++  continuity: `КАК УЧИТЫВАТЬ ЗАМЫСЕЛ (Continuity):
++У автора заданы художественные предпочтения (масштаб, темп, стиль, референсы). Это НЕ факты мира. Не считай нарушением Canon допустимые стилистические решения только потому, что они отличаются от предпочтений автора. Проверяй согласованность текста с Canon, хронологией и состоянием персонажей.`,
++};
++
++function line(label: string, value: string | undefined): string | null {
++  const clean = value?.trim();
++  return clean ? `${label}: ${clean}` : null;
++}
++
++function describeReference(reference: AuthorReference): string {
++  const head = `- [${LABELS.category[reference.category]}] ${reference.title}${
++    reference.source ? ` (источник: ${reference.source})` : ""
++  }`;
++
++  const parts = [
++    reference.technique?.trim() ? `Приём: ${reference.technique.trim()}` : null,
++    reference.instruction?.trim()
++      ? `Инструкция автора: ${reference.instruction.trim()}`
++      : null,
++  ].filter((part): part is string => part !== null);
++
++  return parts.length > 0 ? `${head}. ${parts.join(" ")}` : head;
++}
++
++export function buildAuthorDirectionBlock({
++  intent,
++  references,
++  role,
++}: {
++  intent: AuthorIntent | null;
++  references: readonly AuthorReference[];
++  role: DirectionRole;
++}): string {
++  const hasContent = hasIntentContent(intent);
++
++  if (!hasContent && references.length === 0) return "";
++
++  const header = `
++=====================================================
++АВТОРСКИЙ ЗАМЫСЕЛ ГЛАВЫ
++(художественное исполнение; это НЕ факты мира)
++=====================================================`;
++
++  // Continuity получает только принцип: предпочтения не считаются фактами.
++  if (role === "continuity") {
++    return `\n${header}\n${ROLE_RULES.continuity}\n`;
++  }
++
++  const settings = [
++    intent?.scale ? `Масштабность: ${LABELS.scale[intent.scale]}` : null,
++    intent?.drama ? `Драматичность: ${LABELS.drama[intent.drama]}` : null,
++    intent?.pace ? `Темп: ${LABELS.pace[intent.pace]}` : null,
++    intent?.focus ? `Основной акцент: ${LABELS.focus[intent.focus]}` : null,
++    line("Желаемый эффект на читателя", intent?.readerEffect),
++    line("Эмоциональная траектория главы", intent?.emotionalArc),
++    line("Обязательные элементы", intent?.mustInclude),
++    line("Чего следует избегать", intent?.avoid),
++    line("Композиция и финал", intent?.compositionNotes),
++    line("Авторский промпт", intent?.freePrompt),
++  ].filter((entry): entry is string => entry !== null);
++
++  const sections = [header.trimStart()];
++
++  if (settings.length > 0) sections.push(settings.join("\n"));
++
++  if (references.length > 0) {
++    sections.push(
++      `ВЫБРАННЫЕ РЕФЕРЕНСЫ (художественные приёмы автора; не копируй чужие тексты дословно):\n${references
++        .map(describeReference)
++        .join("\n")}`
++    );
++  }
++
++  sections.push(HIERARCHY, ROLE_RULES[role]);
++
++  return `\n\n${sections.join("\n\n")}\n`;
++}
++
++/**
++ * Отделяет раздел «Замечания для автора» от художественного текста.
++ * Если в ответе нет раздела или перед ним нет текста, ответ возвращается
++ * без изменений.
++ */
++export function splitAuthorNotes(output: string): {
++  text: string;
++  notes: string | null;
++} {
++  const pattern = new RegExp(
++    `^[ \\t]*${AUTHOR_NOTES_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*$`,
++    "m"
++  );
++
++  const match = pattern.exec(output);
++
++  if (!match) return { text: output, notes: null };
++
++  const text = output.slice(0, match.index).trim();
++  const notes = output.slice(match.index + match[0].length).trim();
++
++  if (!text) return { text: output, notes: null };
++
++  return { text, notes: notes || null };
++}
+diff --git a/story-architect/src/lib/authorIntent/schema.ts b/story-architect/src/lib/authorIntent/schema.ts
+new file mode 100644
+index 0000000..5e40869
+--- /dev/null
++++ b/story-architect/src/lib/authorIntent/schema.ts
+@@ -0,0 +1,249 @@
++/**
++ * Авторский замысел главы и библиотека референсов.
++ *
++ * Хранение (без новых таблиц):
++ *  - Chapter.authorIntent  — замысел конкретной главы (JSON);
++ *  - Project.authorReferences — библиотека референсов проекта (JSON-массив).
++ *
++ * Эти данные описывают ХУДОЖЕСТВЕННОЕ ИСПОЛНЕНИЕ, а не факты мира: они не
++ * являются Canon и не могут менять утверждённые события, характеры и факты.
++ */
++import { z } from "zod";
++
++export const SCALE_VALUES = [
++  "CHAMBER",
++  "LOCAL",
++  "MEDIUM",
++  "LARGE",
++  "EPIC",
++] as const;
++
++export const DRAMA_VALUES = [
++  "CALM",
++  "TENSE",
++  "CONFLICT",
++  "HIGH",
++  "CLIMAX",
++] as const;
++
++export const PACE_VALUES = ["SLOW", "RISING", "FAST", "VARIABLE"] as const;
++
++export const FOCUS_VALUES = [
++  "ATMOSPHERE",
++  "PSYCHOLOGY",
++  "ACTION",
++  "MYSTERY",
++  "DIALOGUE",
++  "HERO_GROWTH",
++  "WORLD",
++] as const;
++
++export const REFERENCE_CATEGORIES = [
++  "NARRATIVE_STYLE",
++  "PACE",
++  "ATMOSPHERE",
++  "DIALOGUE",
++  "HERO_GROWTH",
++  "DRAMATURGY",
++  "EVENT_SCALE",
++  "INTRIGUE",
++  "OTHER",
++] as const;
++
++export const LABELS = {
++  scale: {
++    CHAMBER: "камерная",
++    LOCAL: "локальная",
++    MEDIUM: "средняя",
++    LARGE: "крупная",
++    EPIC: "эпическая",
++  },
++  drama: {
++    CALM: "спокойная",
++    TENSE: "напряжённая",
++    CONFLICT: "конфликтная",
++    HIGH: "высокая",
++    CLIMAX: "кульминационная",
++  },
++  pace: {
++    SLOW: "медленный",
++    RISING: "нарастающий",
++    FAST: "быстрый",
++    VARIABLE: "переменный",
++  },
++  focus: {
++    ATMOSPHERE: "атмосфера и погружение",
++    PSYCHOLOGY: "психология персонажей",
++    ACTION: "действие и масштаб событий",
++    MYSTERY: "тайна и неизвестность",
++    DIALOGUE: "диалоги и отношения",
++    HERO_GROWTH: "развитие героя",
++    WORLD: "исследование мира",
++  },
++  category: {
++    NARRATIVE_STYLE: "стиль повествования",
++    PACE: "темп",
++    ATMOSPHERE: "атмосфера",
++    DIALOGUE: "диалоги",
++    HERO_GROWTH: "развитие героя",
++    DRAMATURGY: "драматургия",
++    EVENT_SCALE: "масштаб событий",
++    INTRIGUE: "устройство интриги",
++    OTHER: "другое",
++  },
++} as const;
++
++// ───────────────────────── замысел главы ──────────────────────────────────
++
++const optionalText = (max: number) => z.string().max(max).optional();
++
++export const authorIntentSchema = z.object({
++  scale: z.enum(SCALE_VALUES).nullable().optional(),
++  drama: z.enum(DRAMA_VALUES).nullable().optional(),
++  pace: z.enum(PACE_VALUES).nullable().optional(),
++  focus: z.enum(FOCUS_VALUES).nullable().optional(),
++
++  /**
++   * Выбранные референсы. Не задано (undefined/null) — глава наследует
++   * референсы проекта «по умолчанию»; массив (даже пустой) — используются
++   * только перечисленные.
++   */
++  referenceIds: z.array(z.string().min(1).max(100)).max(50).nullable().optional(),
++
++  freePrompt: optionalText(6000),
++  readerEffect: optionalText(2000),
++  emotionalArc: optionalText(2000),
++  mustInclude: optionalText(3000),
++  avoid: optionalText(3000),
++  compositionNotes: optionalText(3000),
++});
++
++export type AuthorIntent = z.infer<typeof authorIntentSchema>;
++
++const TEXT_FIELDS = [
++  "freePrompt",
++  "readerEffect",
++  "emotionalArc",
++  "mustInclude",
++  "avoid",
++  "compositionNotes",
++] as const;
++
++const SELECT_FIELDS = ["scale", "drama", "pace", "focus"] as const;
++
++/**
++ * Приводит сохранённое или пришедшее значение к чистому замыслу:
++ * обрезает пробелы, убирает пустые поля. Если ничего не задано
++ * (и наследование референсов не переопределено) — возвращает null.
++ */
++export function normalizeIntent(raw: unknown): AuthorIntent | null {
++  const parsed = authorIntentSchema.safeParse(raw);
++
++  if (!parsed.success) return null;
++
++  const source = parsed.data;
++  const result: AuthorIntent = {};
++
++  if (source.scale) result.scale = source.scale;
++  if (source.drama) result.drama = source.drama;
++  if (source.pace) result.pace = source.pace;
++  if (source.focus) result.focus = source.focus;
++
++  for (const field of TEXT_FIELDS) {
++    const value = source[field]?.trim();
++    if (value) result[field] = value;
++  }
++
++  // Пустой массив — осознанное «без референсов», его сохраняем.
++  if (Array.isArray(source.referenceIds)) {
++    result.referenceIds = [...new Set(source.referenceIds)];
++  }
++
++  return Object.keys(result).length > 0 ? result : null;
++}
++
++/** Задано ли в замысле хоть что-то, кроме выбора референсов. */
++export function hasIntentContent(intent: AuthorIntent | null): boolean {
++  if (!intent) return false;
++
++  return (
++    SELECT_FIELDS.some((field) => Boolean(intent[field])) ||
++    TEXT_FIELDS.some((field) => Boolean(intent[field]))
++  );
++}
++
++// ───────────────────────── библиотека референсов ──────────────────────────
++
++export const authorReferenceSchema = z.object({
++  id: z.string().min(1).max(100),
++  title: z.string().trim().min(1).max(200),
++  source: z.string().max(300).optional(),
++  category: z.enum(REFERENCE_CATEGORIES).default("OTHER"),
++  /** Описание художественного приёма. */
++  technique: z.string().max(3000).optional(),
++  /** Авторская инструкция для ИИ. */
++  instruction: z.string().max(4000).optional(),
++  /** Заметки автора: в промпты НЕ попадают. */
++  notes: z.string().max(3000).optional(),
++  active: z.boolean().default(true),
++  /** Применять ко всем главам, где не выбраны свои референсы. */
++  isDefault: z.boolean().default(false),
++});
++
++export type AuthorReference = z.infer<typeof authorReferenceSchema>;
++
++export const MAX_REFERENCES = 200;
++
++/** Вход от клиента: идентификатор можно не указывать, его выдаст сервер. */
++export const referenceInputSchema = authorReferenceSchema.extend({
++  id: z.string().min(1).max(100).optional(),
++});
++
++export const referenceLibraryInputSchema = z
++  .array(referenceInputSchema)
++  .max(MAX_REFERENCES);
++
++/**
++ * Читает сохранённую библиотеку. Повреждённые элементы пропускаются,
++ * чтобы одна плохая запись не ломала генерацию.
++ */
++export function normalizeReferences(raw: unknown): AuthorReference[] {
++  if (!Array.isArray(raw)) return [];
++
++  const seen = new Set<string>();
++  const result: AuthorReference[] = [];
++
++  for (const item of raw) {
++    const parsed = authorReferenceSchema.safeParse(item);
++
++    if (!parsed.success || seen.has(parsed.data.id)) continue;
++
++    seen.add(parsed.data.id);
++    result.push(parsed.data);
++  }
++
++  return result;
++}
++
++/**
++ * Какие референсы применяются к главе (наследование):
++ *  - если в замысле явно выбраны референсы — только они (и только активные);
++ *  - иначе — активные референсы проекта, помеченные «по умолчанию».
++ */
++export function resolveReferences(
++  intent: AuthorIntent | null,
++  library: readonly AuthorReference[]
++): AuthorReference[] {
++  const active = library.filter((reference) => reference.active);
++
++  if (intent && Array.isArray(intent.referenceIds)) {
++    const byId = new Map(active.map((reference) => [reference.id, reference]));
++
++    return intent.referenceIds.flatMap((id) => {
++      const reference = byId.get(id);
++      return reference ? [reference] : [];
++    });
++  }
++
++  return active.filter((reference) => reference.isDefault);
++}
+diff --git a/story-architect/tests/author-intent-api.test.ts b/story-architect/tests/author-intent-api.test.ts
+new file mode 100644
+index 0000000..09bb2fb
+--- /dev/null
++++ b/story-architect/tests/author-intent-api.test.ts
+@@ -0,0 +1,247 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++/**
++ * Сохранение и загрузка авторского замысла и библиотеки референсов через
++ * настоящие обработчики API. База данных заменена хранилищем в памяти,
++ * авторизация — заглушкой (это НЕ тест на реальной базе).
++ */
++
++const state = vi.hoisted(() => ({
++  userId: "user-1" as string | null,
++  projects: new Map<string, any>(),
++  chapters: new Map<string, any>(),
++}));
++
++vi.mock("@/auth", () => ({
++  auth: async () => (state.userId ? { user: { id: state.userId } } : null),
++}));
++
++vi.mock("@prisma/client", () => ({
++  Prisma: { DbNull: "__DbNull__", JsonNull: "__JsonNull__" },
++  PrismaClient: class {},
++}));
++
++vi.mock("@/lib/db", () => ({
++  prisma: {
++    project: {
++      findFirst: async ({ where }: any) => {
++        const project = state.projects.get(where.id);
++        return project && (!where.userId || project.userId === where.userId)
++          ? project
++          : null;
++      },
++      update: async ({ where, data }: any) => {
++        const project = state.projects.get(where.id);
++        Object.assign(project, data);
++        return project;
++      },
++    },
++    chapter: {
++      findFirst: async ({ where }: any) => {
++        const chapter = state.chapters.get(where.id);
++        return chapter && chapter.projectId === where.book.projectId
++          ? chapter
++          : null;
++      },
++      update: async ({ where, data }: any) => {
++        const chapter = state.chapters.get(where.id);
++        Object.assign(chapter, data);
++        return chapter;
++      },
++    },
++  },
++}));
++
++import {
++  GET as getReferences,
++  PUT as putReferences,
++} from "../src/app/api/projects/[id]/references/route";
++import {
++  GET as getIntent,
++  PUT as putIntent,
++} from "../src/app/api/projects/[id]/chapters/[chapterId]/intent/route";
++
++const json = (body: unknown) =>
++  new Request("http://test", {
++    method: "PUT",
++    headers: { "Content-Type": "application/json" },
++    body: JSON.stringify(body),
++  });
++
++const projectCtx = (id = "p1") => ({ params: Promise.resolve({ id }) });
++const chapterCtx = (chapterId: string, id = "p1") => ({
++  params: Promise.resolve({ id, chapterId }),
++});
++
++beforeEach(() => {
++  state.userId = "user-1";
++  state.projects.clear();
++  state.chapters.clear();
++
++  state.projects.set("p1", { id: "p1", userId: "user-1", authorReferences: null });
++  state.projects.set("p2", { id: "p2", userId: "user-2", authorReferences: null });
++  state.chapters.set("c1", { id: "c1", projectId: "p1", authorIntent: null });
++  state.chapters.set("c2", { id: "c2", projectId: "p1", authorIntent: null });
++  state.chapters.set("c3", { id: "c3", projectId: "p2", authorIntent: null });
++});
++
++describe("библиотека референсов (API)", () => {
++  it("создаёт референс, выдаёт идентификатор и возвращает его при загрузке", async () => {
++    const saved = await putReferences(
++      json({
++        references: [
++          {
++            title: "Нарастание тревоги",
++            category: "ATMOSPHERE",
++            technique: "тревога через детали",
++            instruction: "Не называть угрозу прямо",
++            notes: "моя заметка",
++          },
++        ],
++      }),
++      projectCtx()
++    );
++    expect(saved.status).toBe(200);
++
++    const loaded = await (await getReferences(new Request("http://t"), projectCtx())).json();
++    expect(loaded.references).toHaveLength(1);
++    expect(loaded.references[0].id).toBeTruthy();
++    expect(loaded.references[0].title).toBe("Нарастание тревоги");
++    expect(loaded.references[0].notes).toBe("моя заметка");
++    expect(loaded.references[0].active).toBe(true);
++  });
++
++  it("повторяющиеся идентификаторы заменяются, редактирование сохраняет id", async () => {
++    await putReferences(
++      json({
++        references: [
++          { id: "x", title: "Первый" },
++          { id: "x", title: "Второй" },
++        ],
++      }),
++      projectCtx()
++    );
++    const first = (await (await getReferences(new Request("http://t"), projectCtx())).json())
++      .references;
++    expect(new Set(first.map((r: { id: string }) => r.id)).size).toBe(2);
++
++    await putReferences(
++      json({ references: [{ ...first[0], title: "Изменён" }] }),
++      projectCtx()
++    );
++    const second = (await (await getReferences(new Request("http://t"), projectCtx())).json())
++      .references;
++    expect(second).toHaveLength(1);
++    expect(second[0].id).toBe(first[0].id);
++    expect(second[0].title).toBe("Изменён");
++  });
++
++  it("референс без названия отклоняется, сохранённое не затрагивается", async () => {
++    await putReferences(json({ references: [{ id: "a", title: "Остаётся" }] }), projectCtx());
++
++    const bad = await putReferences(json({ references: [{ title: "" }] }), projectCtx());
++    expect(bad.status).toBe(400);
++
++    expect(state.projects.get("p1").authorReferences).toHaveLength(1);
++  });
++
++  it("чужой проект недоступен, данные не меняются", async () => {
++    const read = await getReferences(new Request("http://t"), projectCtx("p2"));
++    expect(read.status).toBe(404);
++
++    const write = await putReferences(json({ references: [{ title: "Взлом" }] }), projectCtx("p2"));
++    expect(write.status).toBe(404);
++    expect(state.projects.get("p2").authorReferences).toBeNull();
++  });
++
++  it("без входа — 401", async () => {
++    state.userId = null;
++    expect((await getReferences(new Request("http://t"), projectCtx())).status).toBe(401);
++  });
++});
++
++describe("авторский замысел главы (API)", () => {
++  it("сохраняется и загружается при повторном открытии", async () => {
++    await putReferences(json({ references: [{ id: "r1", title: "Приём" }] }), projectCtx());
++
++    const saved = await putIntent(
++      json({
++        intent: {
++          scale: "EPIC",
++          drama: "CLIMAX",
++          pace: "RISING",
++          focus: "MYSTERY",
++          referenceIds: ["r1"],
++          freePrompt: "  Начать с тихой сцены  ",
++          readerEffect: "ощущение огромного",
++        },
++      }),
++      chapterCtx("c1")
++    );
++    expect(saved.status).toBe(200);
++
++    const loaded = await (await getIntent(new Request("http://t"), chapterCtx("c1"))).json();
++    expect(loaded.intent).toEqual({
++      scale: "EPIC",
++      drama: "CLIMAX",
++      pace: "RISING",
++      focus: "MYSTERY",
++      referenceIds: ["r1"],
++      freePrompt: "Начать с тихой сцены",
++      readerEffect: "ощущение огромного",
++    });
++    expect(loaded.references.map((r: { id: string }) => r.id)).toEqual(["r1"]);
++  });
++
++  it("настройки одной главы не влияют на другие", async () => {
++    await putIntent(json({ intent: { scale: "EPIC", freePrompt: "только для c1" } }), chapterCtx("c1"));
++
++    const other = await (await getIntent(new Request("http://t"), chapterCtx("c2"))).json();
++    expect(other.intent).toBeNull();
++    expect(state.chapters.get("c2").authorIntent).toBeNull();
++  });
++
++  it("пустой замысел очищает настройки главы", async () => {
++    await putIntent(json({ intent: { scale: "LOCAL" } }), chapterCtx("c1"));
++    await putIntent(json({ intent: { freePrompt: "   " } }), chapterCtx("c1"));
++
++    expect(state.chapters.get("c1").authorIntent).toBe("__DbNull__");
++    const loaded = await (await getIntent(new Request("http://t"), chapterCtx("c1"))).json();
++    expect(loaded.intent).toBeNull();
++  });
++
++  it("неизвестные референсы отбрасываются", async () => {
++    await putReferences(json({ references: [{ id: "r1", title: "Приём" }] }), projectCtx());
++    await putIntent(json({ intent: { referenceIds: ["r1", "нет-такого"] } }), chapterCtx("c1"));
++
++    const loaded = await (await getIntent(new Request("http://t"), chapterCtx("c1"))).json();
++    expect(loaded.intent.referenceIds).toEqual(["r1"]);
++  });
++
++  it("некорректное значение отклоняется и не портит сохранённое", async () => {
++    await putIntent(json({ intent: { scale: "EPIC" } }), chapterCtx("c1"));
++
++    const bad = await putIntent(json({ intent: { scale: "ОГРОМНАЯ" } }), chapterCtx("c1"));
++    expect(bad.status).toBe(400);
++    expect(state.chapters.get("c1").authorIntent).toEqual({ scale: "EPIC" });
++  });
++
++  it("глава чужого проекта недоступна", async () => {
++    const read = await getIntent(new Request("http://t"), chapterCtx("c3", "p2"));
++    expect(read.status).toBe(404);
++
++    const crossProject = await putIntent(json({ intent: { scale: "EPIC" } }), chapterCtx("c3", "p1"));
++    expect(crossProject.status).toBe(404);
++    expect(state.chapters.get("c3").authorIntent).toBeNull();
++  });
++
++  it("не изменяет статус и текст главы", async () => {
++    state.chapters.get("c1").status = "CANON";
++    state.chapters.get("c1").draftText = "Утверждённый текст";
++
++    await putIntent(json({ intent: { scale: "EPIC" } }), chapterCtx("c1"));
++
++    expect(state.chapters.get("c1").status).toBe("CANON");
++    expect(state.chapters.get("c1").draftText).toBe("Утверждённый текст");
++  });
++});
+diff --git a/story-architect/tests/author-intent-routes.test.ts b/story-architect/tests/author-intent-routes.test.ts
+new file mode 100644
+index 0000000..7d2477b
+--- /dev/null
++++ b/story-architect/tests/author-intent-routes.test.ts
+@@ -0,0 +1,376 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++/**
++ * Проверка передачи авторского замысла в Architect, Scene Planner, Writer
++ * и Continuity через НАСТОЯЩИЕ обработчики маршрутов.
++ *
++ * Важно: это НЕ тест на реальной базе и на реальной модели. База данных
++ * заменена записывающей заглушкой, клиент модели — заглушкой, которая
++ * запоминает отправленный промпт. Логика маршрутов, сборка контекста
++ * (Canon, состояние истории, планы) и блок замысла настоящие.
++ */
++
++const h = vi.hoisted(() => ({
++  chapters: {} as Record<string, any>,
++  project: null as any,
++  captured: [] as string[],
++  modelOutput: "" as string,
++  updates: [] as { model: string; args: any }[],
++}));
++
++vi.mock("@/auth", () => ({
++  auth: async () => ({ user: { id: "user-1" } }),
++}));
++
++vi.mock("@/lib/ai/provider", () => {
++  const capture = (args: any) => {
++    const parts: string[] = [];
++    for (const message of args?.input ?? args?.messages ?? []) {
++      parts.push(typeof message.content === "string" ? message.content : JSON.stringify(message.content));
++    }
++    h.captured.push(parts.join("\n\n"));
++  };
++
++  return {
++    AI_NOT_CONFIGURED_MESSAGE: "AI не настроен.",
++    isOpenAIConfigured: () => true,
++    getOpenAIClient: () => ({
++      responses: {
++        create: async (args: any) => {
++          capture(args);
++          return { output_text: h.modelOutput, output: [] };
++        },
++      },
++      chat: {
++        completions: {
++          create: async (args: any) => {
++            capture(args);
++            return { choices: [{ message: { content: "{}" } }] };
++          },
++        },
++      },
++    }),
++  };
++});
++
++vi.mock("@prisma/client", () => {
++  const model = (name: string) =>
++    new Proxy(
++      {},
++      {
++        get: (_t, method: string) => async (args: any) => {
++          if (name === "project" && (method === "findFirst" || method === "findUnique")) {
++            return h.project;
++          }
++          if (name === "chapter" && (method === "findFirst" || method === "findUnique")) {
++            // Запрос предыдущей главы (number < N): предыдущей нет.
++            if (args?.where?.number?.lt !== undefined) return null;
++            return h.chapters[args?.where?.id] ?? null;
++          }
++          if (method === "update") h.updates.push({ model: name, args });
++
++          switch (method) {
++            case "findMany":
++              return [];
++            case "findFirst":
++            case "findUnique":
++              return null;
++            case "updateMany":
++            case "deleteMany":
++              return { count: 0 };
++            case "count":
++              return 0;
++            default:
++              return { id: `${name}-id`, ...(args?.data ?? {}) };
++          }
++        },
++      }
++    );
++
++  const client: any = new Proxy(
++    {},
++    {
++      get: (_t, prop: string) => {
++        if (prop === "$transaction") {
++          return async (arg: any) =>
++            typeof arg === "function" ? arg(client) : Promise.all(arg);
++        }
++        if (prop === "$disconnect") return async () => undefined;
++        return model(prop);
++      },
++    }
++  );
++
++  return {
++    Prisma: { JsonNull: "__JsonNull__", DbNull: "__DbNull__" },
++    AiRunStatus: { SUCCESS: "SUCCESS", FAILED: "FAILED" },
++    ProposalOp: { CREATE: "CREATE", UPDATE: "UPDATE", DELETE: "DELETE" },
++    PrismaClient: class {
++      constructor() {
++        return client;
++      }
++    },
++  };
++});
++
++import { POST as architectPOST } from "../src/app/api/projects/[id]/chapters/[chapterId]/architect/route";
++import { POST as scenePlannerPOST } from "../src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route";
++import { POST as writerPOST } from "../src/app/api/projects/[id]/chapters/[chapterId]/writer/route";
++import { POST as continuityPOST } from "../src/app/api/projects/[id]/chapters/[chapterId]/continuity/route";
++
++const planJson = {
++  chapterPurpose: "Показать масштаб угрозы",
++  initialState: "Герой в порту",
++  endState: "Герой понял, что угроза велика",
++  plotDevelopment: ["Развитие А"],
++  characterDevelopment: ["Развитие Б"],
++  mustHappen: ["Встреча"],
++  mustNotHappen: ["Раскрытие тайны"],
++  openQuestions: [],
++};
++
++function chapter(id: string, number: number, authorIntent: unknown) {
++  return {
++    id,
++    number,
++    title: `Глава ${number}`,
++    purpose: "Цель главы",
++    status: "DRAFT",
++    bookId: "book-1",
++    book: { id: "book-1", number: 1, title: "Книга", projectId: "project-1" },
++    authorIdea: "Идея автора для главы",
++    authorIntent,
++    plan: planJson,
++    planApproved: true,
++    scenes: [
++      {
++        id: `${id}-s1`,
++        order: 1,
++        title: "Сцена 1",
++        purpose: "Начало",
++        plan: "Тихое начало",
++        plannedOutcome: "Тревога",
++        status: "APPROVED",
++      },
++    ],
++    draftText: "Черновик главы для проверки.",
++    wordCount: 4,
++  };
++}
++
++const intent = {
++  scale: "EPIC",
++  drama: "TENSE",
++  pace: "RISING",
++  focus: "MYSTERY",
++  referenceIds: ["r1"],
++  freePrompt: "Начать с тихой камерной сцены и не торопить кульминацию",
++  readerEffect: "ощущение чего-то огромного",
++};
++
++const library = [
++  {
++    id: "r1",
++    title: "Нарастание тревоги",
++    category: "ATMOSPHERE",
++    technique: "тревога через детали и реакцию людей",
++    instruction: "Не называть угрозу прямо",
++    notes: "ЛИЧНАЯ ЗАМЕТКА",
++    active: true,
++    isDefault: false,
++  },
++];
++
++const ctx = (chapterId: string) => ({
++  params: Promise.resolve({ id: "project-1", chapterId }),
++});
++
++const post = () => new Request("http://test", { method: "POST" });
++
++const routes = [
++  { name: "Architect", run: architectPOST },
++  { name: "Scene Planner", run: scenePlannerPOST },
++  { name: "Writer", run: writerPOST },
++  { name: "Continuity", run: continuityPOST },
++] as const;
++
++async function promptFor(run: (r: Request, c: any) => Promise<Response>, chapterId: string) {
++  h.captured.length = 0;
++  const response = await run(post(), ctx(chapterId));
++  const prompt = h.captured[0];
++
++  if (prompt === undefined) {
++    throw new Error(
++      `Промпт не получен, ответ маршрута: ${response.status} ${await response.text()}`
++    );
++  }
++
++  return prompt;
++}
++
++beforeEach(() => {
++  h.captured.length = 0;
++  h.updates.length = 0;
++  h.modelOutput = "";
++  h.project = {
++    id: "project-1",
++    userId: "user-1",
++    name: "Параллакс",
++    projectRules: null,
++    authorReferences: library,
++  };
++  h.chapters = {
++    "ch-with": chapter("ch-with", 2, intent),
++    "ch-without": chapter("ch-without", 3, null),
++  };
++});
++
++describe("авторский замысел доходит до генераторов (настоящие маршруты, заглушки БД и модели)", () => {
++  for (const { name, run } of routes) {
++    it(`${name}: промпт содержит замысел главы`, async () => {
++      const prompt = await promptFor(run, "ch-with");
++
++      if (name === "Continuity") {
++        // Continuity получает только принцип, а не сами предпочтения.
++        expect(prompt).toContain("АВТОРСКИЙ ЗАМЫСЕЛ ГЛАВЫ");
++        expect(prompt).toContain("НЕ факты мира");
++        expect(prompt).not.toContain("Масштабность");
++        return;
++      }
++
++      expect(prompt).toContain("АВТОРСКИЙ ЗАМЫСЕЛ ГЛАВЫ");
++      expect(prompt).toContain("Масштабность: эпическая");
++      expect(prompt).toContain("Драматичность: напряжённая");
++      expect(prompt).toContain("Темп: нарастающий");
++      expect(prompt).toContain("Основной акцент: тайна и неизвестность");
++      expect(prompt).toContain("ощущение чего-то огромного");
++      expect(prompt).toContain("Начать с тихой камерной сцены и не торопить кульминацию");
++    });
++
++    it(`${name}: личные заметки референса в промпт не попадают`, async () => {
++      const prompt = await promptFor(run, "ch-with");
++      expect(prompt).not.toContain("ЛИЧНАЯ ЗАМЕТКА");
++    });
++  }
++
++  it("Architect получает выбранный референс", async () => {
++    const prompt = await promptFor(architectPOST, "ch-with");
++    expect(prompt).toContain("Нарастание тревоги");
++    expect(prompt).toContain("Не называть угрозу прямо");
++    expect(prompt).toContain("Конфликт замысла:");
++  });
++
++  it("Scene Planner получает замысел вместе с утверждённым планом главы", async () => {
++    const prompt = await promptFor(scenePlannerPOST, "ch-with");
++    expect(prompt).toContain("Распредели замысел по сценам");
++    expect(prompt).toContain("Показать масштаб угрозы");
++    expect(prompt).toContain("Нарастание тревоги");
++  });
++
++  it("Writer получает замысел, референсы, Canon и утверждённые планы одновременно", async () => {
++    const prompt = await promptFor(writerPOST, "ch-with");
++
++    // замысел и референсы
++    expect(prompt).toContain("Масштабность: эпическая");
++    expect(prompt).toContain("Нарастание тревоги");
++    expect(prompt).toContain("Начать с тихой камерной сцены");
++    // Canon, состояние истории, планы
++    expect(prompt).toContain("CANON FACTS");
++    expect(prompt).toContain("СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ");
++    expect(prompt).toContain("УТВЕРЖДЁННЫЙ ПЛАН ГЛАВЫ");
++    expect(prompt).toContain("Показать масштаб угрозы");
++    expect(prompt).toContain("УТВЕРЖДЁННЫЙ ПЛАН СЦЕН");
++    expect(prompt).toContain("Тихое начало");
++    // иерархия: Canon выше замысла
++    expect(prompt).toContain("Системные ограничения и защита Canon");
++    expect(prompt).toContain("не разрешает менять утверждённые события");
++  });
++
++  it("авторские инструкции не обходят Canon: правило иерархии присутствует у всех генераторов", async () => {
++    for (const run of [architectPOST, scenePlannerPOST, writerPOST]) {
++      const prompt = await promptFor(run, "ch-with");
++      expect(prompt).toContain("не разрешает менять утверждённые события, характеры и факты мира");
++    }
++  });
++});
++
++describe("главы без замысла и независимость глав", () => {
++  for (const { name, run } of routes) {
++    it(`${name}: без замысла и референсов блока нет, генерация прежняя`, async () => {
++      const prompt = await promptFor(run, "ch-without");
++      expect(prompt).not.toContain("АВТОРСКИЙ ЗАМЫСЕЛ");
++      expect(prompt).not.toContain("Нарастание тревоги");
++    });
++  }
++
++  it("пустой замысел и отсутствие поля дают одинаковый промпт", async () => {
++    h.chapters["ch-without"] = chapter("ch-without", 3, null);
++    const withNull = await promptFor(writerPOST, "ch-without");
++
++    h.chapters["ch-without"] = { ...chapter("ch-without", 3, null), authorIntent: undefined };
++    const withUndefined = await promptFor(writerPOST, "ch-without");
++
++    expect(withNull).toBe(withUndefined);
++  });
++
++  it("настройки одной главы не попадают в промпт другой", async () => {
++    const other = await promptFor(writerPOST, "ch-without");
++    expect(other).not.toContain("Начать с тихой камерной сцены");
++    expect(other).not.toContain("Масштабность");
++  });
++
++  it("референсы по умолчанию применяются и к главе без замысла, пока она не выбрала свои", async () => {
++    h.project.authorReferences = [{ ...library[0], isDefault: true }];
++
++    const inherited = await promptFor(writerPOST, "ch-without");
++    expect(inherited).toContain("Нарастание тревоги");
++
++    h.chapters["ch-without"] = chapter("ch-without", 3, { referenceIds: [] });
++    const overridden = await promptFor(writerPOST, "ch-without");
++    expect(overridden).not.toContain("Нарастание тревоги");
++  });
++
++  it("неактивный референс в промпт не попадает", async () => {
++    h.project.authorReferences = [{ ...library[0], active: false }];
++    const prompt = await promptFor(writerPOST, "ch-with");
++    expect(prompt).not.toContain("Нарастание тревоги");
++  });
++});
++
++describe("Writer: конфликт замысла с Canon сообщается автору, а не попадает в текст главы", () => {
++  const marker = "=== ЗАМЕЧАНИЯ ДЛЯ АВТОРА ===";
++
++  it("раздел замечаний возвращается отдельно и не сохраняется в черновик", async () => {
++    h.modelOutput = `Тихое начало главы. Герой идёт по порту.\n\n${marker}\nЗамысел требовал раскрыть тайну, но Canon это запрещает.`;
++
++    const response = await writerPOST(post(), ctx("ch-with"));
++    const body = await response.json();
++
++    expect(response.status).toBe(200);
++    expect(body.authorNotes).toBe("Замысел требовал раскрыть тайну, но Canon это запрещает.");
++    expect(body.draftText).toBe("Тихое начало главы. Герой идёт по порту.");
++
++    const saved = h.updates.find((u) => u.model === "chapter");
++    expect(saved?.args.data.draftText).toBe("Тихое начало главы. Герой идёт по порту.");
++    expect(saved?.args.data.draftText).not.toContain("Canon это запрещает");
++  });
++
++  it("без конфликта текст сохраняется целиком, замечаний нет", async () => {
++    h.modelOutput = "Просто текст главы без замечаний.";
++
++    const body = await (await writerPOST(post(), ctx("ch-with"))).json();
++
++    expect(body.authorNotes).toBeNull();
++    expect(body.draftText).toBe("Просто текст главы без замечаний.");
++  });
++
++  it("утверждённую главу Writer по-прежнему не перезаписывает", async () => {
++    h.chapters["ch-with"] = { ...chapter("ch-with", 2, intent), status: "CANON" };
++    h.modelOutput = "Новый текст";
++
++    const response = await writerPOST(post(), ctx("ch-with"));
++
++    expect(response.status).toBe(409);
++    expect(h.updates.find((u) => u.model === "chapter")).toBeUndefined();
++  });
++});
+diff --git a/story-architect/tests/author-intent.test.ts b/story-architect/tests/author-intent.test.ts
+new file mode 100644
+index 0000000..787f1d1
+--- /dev/null
++++ b/story-architect/tests/author-intent.test.ts
+@@ -0,0 +1,254 @@
++import { describe, expect, it } from "vitest";
++import {
++  AUTHOR_NOTES_MARKER,
++  buildAuthorDirectionBlock,
++  splitAuthorNotes,
++} from "../src/lib/authorIntent/prompt";
++import {
++  authorIntentSchema,
++  hasIntentContent,
++  normalizeIntent,
++  normalizeReferences,
++  resolveReferences,
++  type AuthorReference,
++} from "../src/lib/authorIntent/schema";
++
++function ref(partial: Partial<AuthorReference> & { id: string }): AuthorReference {
++  return {
++    title: `Референс ${partial.id}`,
++    category: "OTHER",
++    active: true,
++    isDefault: false,
++    ...partial,
++  };
++}
++
++const intent = normalizeIntent({
++  scale: "EPIC",
++  drama: "TENSE",
++  pace: "RISING",
++  focus: "MYSTERY",
++  readerEffect: "ощущение чего-то огромного",
++  emotionalArc: "от тишины к тревоге",
++  mustInclude: "реакция Системы",
++  avoid: "ранняя кульминация",
++  compositionNotes: "финал без разгадки",
++  freePrompt: "Начать с тихой камерной сцены. Не торопить кульминацию.",
++});
++
++describe("normalizeIntent", () => {
++  it("убирает пустые поля и обрезает пробелы", () => {
++    const result = normalizeIntent({
++      scale: "LOCAL",
++      freePrompt: "  текст  ",
++      readerEffect: "   ",
++      pace: null,
++    });
++    expect(result).toEqual({ scale: "LOCAL", freePrompt: "текст" });
++  });
++
++  it("полностью пустой замысел превращается в null", () => {
++    expect(normalizeIntent({})).toBeNull();
++    expect(normalizeIntent({ freePrompt: "   " })).toBeNull();
++    expect(normalizeIntent(null)).toBeNull();
++    expect(normalizeIntent("мусор")).toBeNull();
++  });
++
++  it("неизвестное значение масштаба отвергается схемой", () => {
++    expect(authorIntentSchema.safeParse({ scale: "HUGE" }).success).toBe(false);
++    expect(normalizeIntent({ scale: "HUGE" })).toBeNull();
++  });
++
++  it("пустой список референсов — осознанный выбор, он сохраняется", () => {
++    expect(normalizeIntent({ referenceIds: [] })).toEqual({ referenceIds: [] });
++    expect(hasIntentContent(normalizeIntent({ referenceIds: [] }))).toBe(false);
++  });
++});
++
++describe("resolveReferences (наследование)", () => {
++  const library = [
++    ref({ id: "a", isDefault: true }),
++    ref({ id: "b" }),
++    ref({ id: "c", isDefault: true, active: false }),
++  ];
++
++  it("без выбора в главе применяются активные референсы по умолчанию", () => {
++    expect(resolveReferences(null, library).map((r) => r.id)).toEqual(["a"]);
++    expect(
++      resolveReferences(normalizeIntent({ scale: "LOCAL" }), library).map((r) => r.id)
++    ).toEqual(["a"]);
++  });
++
++  it("явный выбор главы заменяет набор по умолчанию", () => {
++    const chosen = normalizeIntent({ referenceIds: ["b"] });
++    expect(resolveReferences(chosen, library).map((r) => r.id)).toEqual(["b"]);
++  });
++
++  it("пустой выбор главы отключает референсы по умолчанию", () => {
++    const none = normalizeIntent({ referenceIds: [] });
++    expect(resolveReferences(none, library)).toEqual([]);
++  });
++
++  it("неактивные и несуществующие референсы не применяются", () => {
++    const chosen = normalizeIntent({ referenceIds: ["c", "zzz", "b"] });
++    expect(resolveReferences(chosen, library).map((r) => r.id)).toEqual(["b"]);
++  });
++});
++
++describe("normalizeReferences", () => {
++  it("пропускает повреждённые и повторяющиеся записи", () => {
++    const result = normalizeReferences([
++      { id: "a", title: "Хороший" },
++      { id: "a", title: "Дубль" },
++      { id: "b" },
++      "мусор",
++      { id: "c", title: "Ещё один", category: "DIALOGUE" },
++    ]);
++    expect(result.map((r) => r.id)).toEqual(["a", "c"]);
++    expect(result[0]?.active).toBe(true);
++  });
++
++  it("не массив — пустая библиотека", () => {
++    expect(normalizeReferences(undefined)).toEqual([]);
++    expect(normalizeReferences({ id: "a" })).toEqual([]);
++  });
++});
++
++describe("buildAuthorDirectionBlock", () => {
++  const references = [
++    ref({
++      id: "r1",
++      title: "Нарастание тревоги",
++      source: "авторский приём",
++      category: "ATMOSPHERE",
++      technique: "тревога через детали и реакцию людей",
++      instruction: "Не называть угрозу прямо",
++      notes: "ЛИЧНАЯ ЗАМЕТКА АВТОРА",
++    }),
++  ];
++
++  it("без замысла и референсов блок пустой: генерация прежняя", () => {
++    for (const role of ["architect", "scene_planner", "writer", "continuity"] as const) {
++      expect(buildAuthorDirectionBlock({ intent: null, references: [], role })).toBe("");
++    }
++  });
++
++  it("только пустой выбор референсов тоже не меняет промпт", () => {
++    expect(
++      buildAuthorDirectionBlock({
++        intent: normalizeIntent({ referenceIds: [] }),
++        references: [],
++        role: "writer",
++      })
++    ).toBe("");
++  });
++
++  it("содержит все настройки замысла на русском", () => {
++    const block = buildAuthorDirectionBlock({ intent, references, role: "architect" });
++    for (const expected of [
++      "Масштабность: эпическая",
++      "Драматичность: напряжённая",
++      "Темп: нарастающий",
++      "Основной акцент: тайна и неизвестность",
++      "ощущение чего-то огромного",
++      "от тишины к тревоге",
++      "реакция Системы",
++      "ранняя кульминация",
++      "финал без разгадки",
++      "Начать с тихой камерной сцены",
++    ]) {
++      expect(block).toContain(expected);
++    }
++  });
++
++  it("передаёт приём и инструкцию референса, но не личные заметки", () => {
++    const block = buildAuthorDirectionBlock({ intent, references, role: "writer" });
++    expect(block).toContain("Нарастание тревоги");
++    expect(block).toContain("тревога через детали");
++    expect(block).toContain("Не называть угрозу прямо");
++    expect(block).not.toContain("ЛИЧНАЯ ЗАМЕТКА АВТОРА");
++  });
++
++  it("задаёт иерархию: Canon выше замысла, замысел выше референсов", () => {
++    const block = buildAuthorDirectionBlock({ intent, references, role: "writer" });
++    const canon = block.indexOf("Системные ограничения и защита Canon");
++    const facts = block.indexOf("Подтверждённые факты истории");
++    const plans = block.indexOf("Утверждённый план главы и план сцен");
++    const design = block.indexOf("Авторский замысел этой главы");
++    const refs = block.indexOf("Выбранные референсы и общие авторские предпочтения");
++    expect(canon).toBeGreaterThan(-1);
++    expect(canon).toBeLessThan(facts);
++    expect(facts).toBeLessThan(plans);
++    expect(plans).toBeLessThan(design);
++    expect(design).toBeLessThan(refs);
++    expect(block).toContain("не разрешает менять утверждённые события");
++  });
++
++  it("Architect и Scene Planner сообщают о конфликте через openQuestions", () => {
++    for (const role of ["architect", "scene_planner"] as const) {
++      const block = buildAuthorDirectionBlock({ intent, references, role });
++      expect(block).toContain("openQuestions");
++      expect(block).toContain("Конфликт замысла:");
++    }
++  });
++
++  it("Scene Planner просит распределить замысел по сценам", () => {
++    const block = buildAuthorDirectionBlock({ intent, references, role: "scene_planner" });
++    expect(block).toContain("Распредели замысел по сценам");
++    expect(block).toContain("эмоциональный пик");
++  });
++
++  it("Writer получает правило раздела замечаний при конфликте", () => {
++    const block = buildAuthorDirectionBlock({ intent, references, role: "writer" });
++    expect(block).toContain(AUTHOR_NOTES_MARKER);
++    expect(block).toContain("следуй им");
++  });
++
++  it("Continuity получает только принцип: предпочтения — не факты", () => {
++    const block = buildAuthorDirectionBlock({ intent, references, role: "continuity" });
++    expect(block).toContain("НЕ факты мира");
++    expect(block).toContain("Не считай нарушением Canon допустимые стилистические решения");
++    expect(block).not.toContain("Масштабность");
++    expect(block).not.toContain("Нарастание тревоги");
++    expect(block).not.toContain("Начать с тихой камерной сцены");
++  });
++
++  it("референсы по умолчанию попадают в промпт и без замысла главы", () => {
++    const block = buildAuthorDirectionBlock({
++      intent: null,
++      references,
++      role: "writer",
++    });
++    expect(block).toContain("Нарастание тревоги");
++    expect(block).not.toContain("Масштабность");
++  });
++});
++
++describe("splitAuthorNotes", () => {
++  it("отделяет раздел замечаний от текста главы", () => {
++    const output = `Глава начинается тихо.\n\nКонец главы.\n\n${AUTHOR_NOTES_MARKER}\nЗамысел требовал раскрыть тайну, но Canon запрещает.`;
++    const { text, notes } = splitAuthorNotes(output);
++    expect(text).toBe("Глава начинается тихо.\n\nКонец главы.");
++    expect(notes).toBe("Замысел требовал раскрыть тайну, но Canon запрещает.");
++    expect(text).not.toContain("Canon запрещает");
++  });
++
++  it("без раздела текст возвращается как есть", () => {
++    expect(splitAuthorNotes("Просто текст")).toEqual({
++      text: "Просто текст",
++      notes: null,
++    });
++  });
++
++  it("если перед разделом нет текста, ответ не теряется", () => {
++    const output = `${AUTHOR_NOTES_MARKER}\nтолько замечания`;
++    expect(splitAuthorNotes(output)).toEqual({ text: output, notes: null });
++  });
++
++  it("пустой раздел замечаний не создаёт пустую заметку", () => {
++    expect(splitAuthorNotes(`Текст\n${AUTHOR_NOTES_MARKER}\n`)).toEqual({
++      text: "Текст",
++      notes: null,
++    });
++  });
++});

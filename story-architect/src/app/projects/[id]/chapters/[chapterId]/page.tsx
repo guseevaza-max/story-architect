@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 
 import ArchitectButton from "./ArchitectButton";
 import SaveIdeaForm from "./SaveIdeaForm";
+import AuthorIntentPanel from "./AuthorIntentPanel";
 import ScenePlannerButton from "./ScenePlannerButton";
 import WriterButton from "./writerButton";
 import ContinuityButton from "./ContinuityButton";
@@ -117,6 +118,11 @@ export default async function ChapterPage({
         <SaveIdeaForm projectId={project.id} chapterId={chapter.id} initialIdea={chapter.authorIdea || ""} />
       </section>
 
+      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <h2 style={{ marginTop: 0 }}>🎨 Авторский замысел</h2>
+        <AuthorIntentPanel projectId={project.id} chapterId={chapter.id} />
+      </section>
+
       {hasPlan && (
         <section style={{ border: "2px solid #d9c58b", borderRadius: 12, padding: 24, marginBottom: 16, background: "#fffdf5" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 20 }}>
@@ -204,13 +210,13 @@ export default async function ChapterPage({
         </section>
       )}
 
-      {chapter.draftText && (
+      {(
         <section style={{ border: "2px solid #9bb7d4", borderRadius: 12, padding: 24, marginBottom: 16, background: "#f8fbff" }}>
           <div style={{ marginBottom: 20 }}>
             <h2 style={{ margin: 0 }}>📖 Редактор черновика</h2>
             <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14, lineHeight: 1.5 }}>Здесь можно отредактировать текст главы. Изменения пока остаются в черновике и не изменяют Canon.</p>
           </div>
-          <DraftEditor projectId={project.id} chapterId={chapter.id} initialText={chapter.draftText} />
+          <DraftEditor projectId={project.id} chapterId={chapter.id} initialText={chapter.draftText ?? ""} />
         </section>
       )}
 

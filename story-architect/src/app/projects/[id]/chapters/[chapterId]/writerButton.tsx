@@ -14,10 +14,12 @@ export default function WriterButton({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notes, setNotes] = useState("");
 
   async function handleGenerate() {
     setLoading(true);
     setError("");
+    setNotes("");
 
     try {
       const response = await fetch(
@@ -36,6 +38,9 @@ export default function WriterButton({
         );
         return;
       }
+
+      // Конфликт замысла с Canon: текст главы по Canon, замечания отдельно.
+      setNotes(typeof data.authorNotes === "string" ? data.authorNotes : "");
 
       router.refresh();
     } catch (error) {
@@ -74,6 +79,22 @@ export default function WriterButton({
           ? "⏳ Writer пишет главу..."
           : "✍️ Сгенерировать черновик"}
       </button>
+
+      {notes && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 8,
+            background: "#fff4e0",
+            color: "#6b4600",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Замечания Writer по замыслу:</strong>
+          <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{notes}</div>
+        </div>
+      )}
 
       {error && (
         <div

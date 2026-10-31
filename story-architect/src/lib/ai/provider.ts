@@ -1,13 +1,14 @@
+
 import "server-only";
+import OpenAI from "openai";
 
 /**
- * AI Provider Layer (требование заказчика: AI Router → Provider → Model).
+ * AI Provider Layer:
+ * AI Router → Provider → Model.
  *
- * Приложение нигде не знает имени конкретной модели. Оно знает класс задачи
- * (FAST / STRONG / REASONING), роутер выбирает модель из конфигурации.
- * Смена провайдера — правка .env, не правка кода.
- *
- * Ключ API читается только здесь и только на сервере (ТЗ п. 66).
+ * Ключи читаются только на сервере и только в этом модуле.
+ * complete() сохраняет существующий путь через AI_BASE_URL (например, OpenRouter).
+ * getOpenAIClient() предоставляет SDK-клиент для существующих API-маршрутов.
  */
 
 export type ModelClass = "FAST" | "STRONG" | "REASONING";
@@ -22,7 +23,7 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
-  /** JSON Schema для structured output (ТЗ п. 57). */
+  /** JSON Schema для structured output. */
   jsonSchema?: { name: string; schema: Record<string, unknown> };
 }
 
@@ -38,8 +39,8 @@ export interface CompletionResult {
 
 interface ModelConfig {
   model: string;
-  priceIn: number; // за 1M входных токенов
-  priceOut: number; // за 1M выходных токенов
+  priceIn: number;
+  priceOut: number;
 }
 
 function env(name: string, fallback = ""): string {
@@ -64,6 +65,7 @@ function modelConfig(cls: ModelClass): ModelConfig {
       priceOut: Number(env("AI_PRICE_REASONING_OUT", "0")),
     },
   };
+
   return map[cls];
 }
 
@@ -73,6 +75,7 @@ export function estimateCost(
   outputTokens: number
 ): number {
   const cfg = modelConfig(cls);
+
   return (
     (inputTokens / 1_000_000) * cfg.priceIn +
     (outputTokens / 1_000_000) * cfg.priceOut
@@ -82,12 +85,32 @@ export function estimateCost(
 export class AiProviderError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
+    this.name = "AiProviderError";
   }
 }
 
 /**
- * Вызов модели. Единственная точка выхода наружу.
- * Ответ не парсится здесь — разбором и валидацией занимается structured.ts.
+ * Создаёт SDK-клиент для маршрутов, использующих OpenAI API.
+ * Значение ключа не возвращается и не записывается в логи.
+ */
+export function getOpenAIClient(): OpenAI {
+  const apiKey = env("OPENAI_API_KEY");
+
+  if (!apiKey) {
+    throw new AiProviderError("OPENAI_API_KEY не настроен");
+  }
+
+  return new OpenAI({ apiKey });
+}
+
+/** Проверяет наличие ключа, не раскрывая его значение. */
+export function hasOpenAIKey(): boolean {
+  return Boolean(env("OPENAI_API_KEY"));
+}
+
+/**
+ * Вызов модели через настроенный AI_BASE_URL.
+ * Существующий путь через AI_API_KEY и OpenRouter сохранён.
  */
 export async function complete(
   req: CompletionRequest
@@ -100,15 +123,23 @@ export async function complete(
   }
 
   const apiKey = env("AI_API_KEY");
+
   if (!apiKey) {
     throw new AiProviderError(
       "AI_API_KEY не задан. Укажите ключ в .env или включите AI_MOCK=true."
     );
   }
+
   if (!cfg.model) {
     throw new AiProviderError(
       `Модель для класса ${req.modelClass} не настроена (AI_MODEL_*)`
     );
+  }
+
+  const baseUrl = env("AI_BASE_URL").replace(/\/+$/, "");
+
+  if (!baseUrl) {
+    throw new AiProviderError("AI_BASE_URL не настроен");
   }
 
   const body: Record<string, unknown> = {
@@ -129,7 +160,7 @@ export async function complete(
     };
   }
 
-  const res = await fetch(`${env("AI_BASE_URL")}/chat/completions`, {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -139,9 +170,8 @@ export async function complete(
   });
 
   if (!res.ok) {
-    // Текст ошибки может содержать эхо запроса — ключ в него не попадает,
-    // но на всякий случай обрезаем.
     const detail = (await res.text()).slice(0, 500);
+
     throw new AiProviderError(
       `Провайдер вернул ${res.status}: ${redact(detail)}`,
       res.status
@@ -168,14 +198,18 @@ export async function complete(
     inputTokens,
     outputTokens,
     cachedTokens,
-    estimatedCost: estimateCost(req.modelClass, inputTokens, outputTokens),
+    estimatedCost: estimateCost(
+      req.modelClass,
+      inputTokens,
+      outputTokens
+    ),
     durationMs: Date.now() - started,
   };
 }
 
-/** Убирает возможные ключи из строк перед логированием (ТЗ п. 76). */
+/** Убирает возможные ключи из строк перед логированием. */
 export function redact(value: string): string {
-  return value.replace(/(sk-|key-)[A-Za-z0-9_\-]{8,}/g, "$1***");
+  return value.replace(/(sk-|key-)[A-Za-z0-9_-]{8,}/g, "$1***");
 }
 
 function mockComplete(
@@ -186,6 +220,7 @@ function mockComplete(
   const text = req.jsonSchema
     ? JSON.stringify({ __mock: true, schema: req.jsonSchema.name })
     : "[MOCK] Ответ заглушки. Установите AI_API_KEY для реальной генерации.";
+
   return {
     text,
     model: cfg.model || `mock-${req.modelClass.toLowerCase()}`,
