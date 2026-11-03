@@ -7,7 +7,7 @@
 ## Запуск
 
 ```bash
-cp .env.example .env        # заполнить AI_API_KEY и AUTH_SECRET
+cp .env.example .env        # заполнить DATABASE_URL, AUTH_SECRET, OPENAI_API_KEY (и AI_MODEL_STRONG для Lore Extraction)
 npm install
 docker compose up -d db     # или указать свой DATABASE_URL (Supabase)
 npm run db:migrate

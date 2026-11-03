@@ -19,6 +19,11 @@ export const MAX_SOURCE_CHARS = 30_000;
 export const MAX_FACTS = 40;
 /** Слишком короткая цитата ничего не доказывает. */
 export const MIN_QUOTE_CHARS = 12;
+/** Ниже этой уверенности факт не попадает в очередь (считается гипотезой). */
+export const MIN_CONFIDENCE = 0.5;
+/** Оговорки, по которым фраза считается предположением, а не фактом. */
+export const HEDGE_PATTERN =
+  /(?:^|[^а-яё])(?:возможно|вероятно|предположительно|наверное|якобы|по слухам|видимо|скорее всего|похоже,? что|как будто)(?![а-яё])/i;
 
 // ───────────────────────── подготовка источника ───────────────────────────
 
@@ -85,7 +90,7 @@ const SYSTEM_PROMPT = `Ты извлекаешь фактические утве
 5. evidenceQuote — ТОЧНАЯ цитата из текста: непрерывный фрагмент, скопированный символ в символ (без изменений, пересказа и сокращений). Желательно одно-два предложения.
 6. confidence — число от 0 до 1: насколько прямо текст подтверждает факт.
 7. category — одно значение из списка: ${LORE_FACT_CATEGORIES.join(", ")}.
-8. Не более ${MAX_FACTS} фактов; выбирай самые значимые для мира и сюжета.
+8. Не более ${MAX_FACTS} фактов; выбирай только ЗНАЧИМЫЕ для мира и сюжета: правила, законы, устройство, историю, важные свойства, связи и обязательства. Не извлекай мелкие детали, бытовые подробности, очевидные или повторяющиеся утверждения. Не повторяй один и тот же факт разными словами. Лучше меньше фактов, но существенных.
 9. Если в тексте нет подходящих фактов, верни пустой массив facts.
 
 Верни ТОЛЬКО JSON по заданной схеме.`;
@@ -200,7 +205,9 @@ export type SkipReason =
   | "duplicate_pending"
   | "previously_rejected"
   | "already_canon"
-  | "limit_exceeded";
+  | "limit_exceeded"
+  | "low_confidence"
+  | "hedged";
 
 export type SelectedFact = {
   statement: string;
@@ -243,6 +250,17 @@ export function selectFacts(
     // Неподтверждённые цитатой результаты отклоняются.
     if (!verifyQuote(source, raw.evidenceQuote)) {
       skipped.push({ statement, reason: "quote_not_found" });
+      continue;
+    }
+
+    // Гипотезы и предположения фактами не считаются (даже если AI их извлёк).
+    if (HEDGE_PATTERN.test(raw.evidenceQuote) || HEDGE_PATTERN.test(statement)) {
+      skipped.push({ statement, reason: "hedged" });
+      continue;
+    }
+
+    if (!(Number.isFinite(raw.confidence) && raw.confidence >= MIN_CONFIDENCE)) {
+      skipped.push({ statement, reason: "low_confidence" });
       continue;
     }
 

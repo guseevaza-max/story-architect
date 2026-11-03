@@ -201,6 +201,21 @@ describe("входные данные и ошибки AI", () => {
     expect(h.proposals).toHaveLength(0);
   });
 
+  it("пустой ответ из-за лимита длины — подсказка и причина в сообщении", async () => {
+    h.completeImpl = async () => ({
+      text: "",
+      model: "m",
+      finishReason: "length",
+      outputTokens: 12000,
+    });
+    const response = await call();
+    const body = await response.json();
+    expect(response.status).toBe(502);
+    expect(body.error).toContain("пустой ответ");
+    expect(body.error).toContain("лимит");
+    expect(h.proposals).toHaveLength(0);
+  });
+
   it("ответ без списка facts — 502", async () => {
     h.completeImpl = async () => ({ text: '{"result": []}', model: "m" });
     expect((await call()).status).toBe(502);

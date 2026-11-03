@@ -96,7 +96,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
       completion = await complete({
         modelClass: "STRONG",
         temperature: 0.1,
-        maxTokens: 6000,
+        maxTokens: 12000,
         messages: buildExtractionMessages(title, source.text),
         jsonSchema: EXTRACTION_JSON_SCHEMA as unknown as {
           name: string;
@@ -120,7 +120,22 @@ export async function POST(_request: Request, { params }: RouteContext) {
     const parsed = parseExtractionResponse(completion.text);
 
     if (!parsed.ok) {
-      return NextResponse.json({ error: parsed.error }, { status: 502 });
+      // Диагностика без секретов: почему ответ оказался непригодным.
+      console.error("Lore extraction: ответ не разобран", {
+        model: completion.model,
+        finishReason: completion.finishReason ?? null,
+        outputTokens: completion.outputTokens,
+        textLength: completion.text.length,
+      });
+
+      const reason =
+        completion.finishReason === "length"
+          ? " Модель упёрлась в лимит длины ответа: разбейте материал на части или задайте AI_REASONING_EFFORT=low в .env."
+          : completion.finishReason
+            ? ` (причина остановки: ${completion.finishReason}, токенов в ответе: ${completion.outputTokens})`
+            : "";
+
+      return NextResponse.json({ error: `${parsed.error}${reason}` }, { status: 502 });
     }
 
     // Что уже есть: ожидающие и отклонённые предложения этого материала

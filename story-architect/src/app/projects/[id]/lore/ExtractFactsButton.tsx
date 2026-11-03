@@ -20,6 +20,8 @@ const REASONS: Record<string, string> = {
   previously_rejected: "ранее отклонено вами",
   already_canon: "уже есть в Canon",
   limit_exceeded: "превышен лимит фактов",
+  low_confidence: "низкая уверенность (гипотеза)",
+  hedged: "предположение, а не факт",
 };
 
 /**

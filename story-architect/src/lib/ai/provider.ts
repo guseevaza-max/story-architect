@@ -33,6 +33,8 @@ export interface CompletionResult {
   inputTokens: number;
   outputTokens: number;
   cachedTokens: number;
+  /** Причина остановки ответа (stop, length и т. п.), если провайдер её вернул. */
+  finishReason?: string;
   estimatedCost: number;
   durationMs: number;
 }
@@ -108,9 +110,80 @@ export function hasOpenAIKey(): boolean {
   return Boolean(env("OPENAI_API_KEY"));
 }
 
+export type ProviderName = "openai" | "openrouter" | "custom";
+
+export interface AiConfig {
+  provider: ProviderName;
+  baseUrl: string;
+  apiKey: string;
+  keyVar: "OPENAI_API_KEY" | "AI_API_KEY" | "";
+}
+
+const DEFAULT_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+};
+
 /**
- * Вызов модели через настроенный AI_BASE_URL.
- * Существующий путь через AI_API_KEY и OpenRouter сохранён.
+ * Определяет провайдера, адрес и ключ для complete().
+ * - openai (по умолчанию): адрес https://api.openai.com/v1, ключ OPENAI_API_KEY
+ *   (запасной вариант — AI_API_KEY для старых настроек);
+ * - openrouter / custom: ключ AI_API_KEY (запасной — OPENAI_API_KEY).
+ * Если AI_PROVIDER не задан, а AI_BASE_URL указывает на openrouter.ai,
+ * используется openrouter (обратная совместимость).
+ */
+export function resolveAiConfig(): AiConfig {
+  const explicit = env("AI_PROVIDER").trim().toLowerCase();
+  const rawBase = env("AI_BASE_URL").trim().replace(/\/+$/, "");
+
+  let provider: ProviderName = "openai";
+
+  if (explicit === "openrouter" || explicit === "custom" || explicit === "openai") {
+    provider = explicit;
+  } else if (!explicit && /(^|\/\/|\.)openrouter\.ai(\/|$)/.test(rawBase)) {
+    provider = "openrouter";
+  } else if (!explicit && rawBase && !/api\.openai\.com/.test(rawBase)) {
+    provider = "custom";
+  }
+
+  const baseUrl = rawBase || DEFAULT_BASE_URLS[provider] || "";
+  const order: ("OPENAI_API_KEY" | "AI_API_KEY")[] =
+    provider === "openai"
+      ? ["OPENAI_API_KEY", "AI_API_KEY"]
+      : ["AI_API_KEY", "OPENAI_API_KEY"];
+
+  for (const keyVar of order) {
+    const apiKey = env(keyVar).trim();
+    if (apiKey) return { provider, baseUrl, apiKey, keyVar };
+  }
+
+  return { provider, baseUrl, apiKey: "", keyVar: "" };
+}
+
+function providerHint(config: AiConfig, status: number, detail: string): string {
+  if (
+    config.provider === "openrouter" &&
+    (status === 401 || status === 403) &&
+    !config.apiKey.startsWith("sk-or-")
+  ) {
+    return "Ключ не похож на ключ OpenRouter (они начинаются с sk-or-). Для OpenAI задайте AI_PROVIDER=openai и очистите AI_BASE_URL.";
+  }
+  if (status === 401 || status === 403) {
+    return `Провайдер не принял ключ (${config.keyVar || "ключ"}). Проверьте, что ключ действителен и подходит провайдеру ${config.provider}.`;
+  }
+  if (status === 404 || (status === 400 && /model/i.test(detail))) {
+    return "Возможно, модель из AI_MODEL_* недоступна для вашего ключа. Проверьте её название у провайдера.";
+  }
+  if (status === 429) {
+    return "Превышен лимит запросов или закончился баланс у провайдера.";
+  }
+  return "";
+}
+
+/**
+ * Вызов модели через OpenAI-совместимый /chat/completions.
+ * По умолчанию — OpenAI (OPENAI_API_KEY); OpenRouter и другие провайдеры
+ * по-прежнему поддерживаются через AI_PROVIDER / AI_BASE_URL / AI_API_KEY.
  */
 export async function complete(
   req: CompletionRequest
@@ -122,32 +195,53 @@ export async function complete(
     return mockComplete(req, cfg, started);
   }
 
-  const apiKey = env("AI_API_KEY");
+  const config = resolveAiConfig();
 
-  if (!apiKey) {
+  if (!config.apiKey) {
     throw new AiProviderError(
-      "AI_API_KEY не задан. Укажите ключ в .env или включите AI_MOCK=true."
+      config.provider === "openai"
+        ? "OPENAI_API_KEY не настроен. Укажите ключ в .env или включите AI_MOCK=true."
+        : "AI_API_KEY не настроен для провайдера " +
+          `${config.provider}. Укажите ключ в .env или включите AI_MOCK=true.`
     );
   }
 
   if (!cfg.model) {
     throw new AiProviderError(
-      `Модель для класса ${req.modelClass} не настроена (AI_MODEL_*)`
+      `Модель для класса ${req.modelClass} не настроена: задайте AI_MODEL_${req.modelClass} в .env.`
     );
   }
 
-  const baseUrl = env("AI_BASE_URL").replace(/\/+$/, "");
-
-  if (!baseUrl) {
-    throw new AiProviderError("AI_BASE_URL не настроен");
+  if (!config.baseUrl) {
+    throw new AiProviderError(
+      "AI_BASE_URL не настроен для выбранного провайдера (AI_PROVIDER=custom требует адрес)."
+    );
   }
 
   const body: Record<string, unknown> = {
     model: cfg.model,
     messages: req.messages,
-    temperature: req.temperature ?? 0.7,
-    max_tokens: req.maxTokens ?? 4000,
   };
+
+  if (config.provider === "openai") {
+    // Новые модели OpenAI принимают max_completion_tokens, а не max_tokens.
+    body.max_completion_tokens = req.maxTokens ?? 4000;
+    // Не все модели OpenAI допускают нестандартную температуру.
+    if (req.temperature !== undefined && env("AI_SEND_TEMPERATURE") === "true") {
+      body.temperature = req.temperature;
+    }
+  } else {
+    body.temperature = req.temperature ?? 0.7;
+    body.max_tokens = req.maxTokens ?? 4000;
+
+    // Модели с «рассуждением» могут потратить весь лимит ответа на мысли и вернуть
+    // пустой текст. AI_REASONING_EFFORT (none | minimal | low | medium | high)
+    // ограничивает рассуждение у OpenRouter; без переменной поведение прежнее.
+    const effort = env("AI_REASONING_EFFORT").trim().toLowerCase();
+    if (effort && /^(none|minimal|low|medium|high)$/.test(effort)) {
+      body.reasoning = { effort };
+    }
+  }
 
   if (req.jsonSchema) {
     body.response_format = {
@@ -160,26 +254,36 @@ export async function complete(
     };
   }
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+
+  try {
+    res = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "неизвестная ошибка";
+    throw new AiProviderError(
+      `Не удалось связаться с провайдером (${config.provider}): ${redact(reason, config.apiKey)}`
+    );
+  }
 
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 500);
+    const hint = providerHint(config, res.status, detail);
 
     throw new AiProviderError(
-      `Провайдер вернул ${res.status}: ${redact(detail)}`,
+      `Провайдер вернул ${res.status}: ${redact(detail, config.apiKey)}${hint ? ` | ${hint}` : ""}`,
       res.status
     );
   }
 
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+  let json: {
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
     usage?: {
       prompt_tokens?: number;
       completion_tokens?: number;
@@ -187,7 +291,14 @@ export async function complete(
     };
   };
 
+  try {
+    json = await res.json();
+  } catch {
+    throw new AiProviderError("Провайдер вернул ответ, который не удалось разобрать как JSON.");
+  }
+
   const text = json.choices?.[0]?.message?.content ?? "";
+  const finishReason = json.choices?.[0]?.finish_reason ?? undefined;
   const inputTokens = json.usage?.prompt_tokens ?? 0;
   const outputTokens = json.usage?.completion_tokens ?? 0;
   const cachedTokens = json.usage?.prompt_tokens_details?.cached_tokens ?? 0;
@@ -198,18 +309,17 @@ export async function complete(
     inputTokens,
     outputTokens,
     cachedTokens,
-    estimatedCost: estimateCost(
-      req.modelClass,
-      inputTokens,
-      outputTokens
-    ),
+    finishReason,
+    estimatedCost: estimateCost(req.modelClass, inputTokens, outputTokens),
     durationMs: Date.now() - started,
   };
 }
 
 /** Убирает возможные ключи из строк перед логированием. */
-export function redact(value: string): string {
-  return value.replace(/(sk-|key-)[A-Za-z0-9_-]{8,}/g, "$1***");
+export function redact(value: string, knownKey?: string): string {
+  let out = value;
+  if (knownKey && knownKey.length >= 8) out = out.split(knownKey).join("***");
+  return out.replace(/(sk-(?:or-)?|key-)[A-Za-z0-9_-]{8,}/g, "$1***");
 }
 
 function mockComplete(

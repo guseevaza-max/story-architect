@@ -8,6 +8,7 @@ import {
   parseExtractionResponse,
   prepareSource,
   selectFacts,
+  HEDGE_PATTERN,
   verifyQuote,
   type ExistingFacts,
   type RawFact,
@@ -197,15 +198,50 @@ describe("selectFacts", () => {
     expect(skipped.filter((s) => s.reason === "limit_exceeded")).toHaveLength(5);
   });
 
-  it("уверенность ограничивается диапазоном 0–1, неизвестная категория становится OTHER", () => {
+  it("уверенность выше 1 ограничивается единицей, неизвестная категория становится OTHER", () => {
     const { accepted } = selectFacts(
-      [fact({ confidence: 7, category: "СТРАННАЯ" }), fact({ statement: "Второй", confidence: -3 })],
+      [fact({ confidence: 7, category: "СТРАННАЯ" })],
       SOURCE,
       none
     );
     expect(accepted[0]?.confidence).toBe(1);
     expect(accepted[0]?.category).toBe("OTHER");
-    expect(accepted[1]?.confidence).toBe(0);
+  });
+
+  it("низкая уверенность (гипотеза) не попадает в очередь", () => {
+    const { accepted, skipped } = selectFacts(
+      [
+        fact({ statement: "Слабый", confidence: 0.4 }),
+        fact({ statement: "Отрицательный", confidence: -3 }),
+        fact({ statement: "Граничный", confidence: 0.5 }),
+      ],
+      SOURCE,
+      none
+    );
+    expect(accepted.map((f) => f.statement)).toEqual(["Граничный"]);
+    expect(skipped.map((s) => s.reason)).toEqual(["low_confidence", "low_confidence"]);
+  });
+
+  it("предположения с оговорками («возможно», «по слухам») пропускаются", () => {
+    const { accepted, skipped } = selectFacts(
+      [
+        fact({ statement: "Арен, возможно, знает больше", evidenceQuote: SOURCE.slice(0, 20) }),
+        fact({ statement: "Обычный факт" }),
+      ],
+      SOURCE,
+      none
+    );
+    expect(accepted.map((f) => f.statement)).toEqual(["Обычный факт"]);
+    expect(skipped.map((s) => s.reason)).toEqual(["hedged"]);
+  });
+
+  it("HEDGE_PATTERN не срабатывает на обычных словах", () => {
+    for (const text of ["Невозможно пройти без пропуска", "Видимость ограничена", "Император правит."]) {
+      expect(HEDGE_PATTERN.test(text)).toBe(false);
+    }
+    for (const text of ["Возможно, это ложь", "Он, вероятно, жив", "Говорят, по слухам, так"]) {
+      expect(HEDGE_PATTERN.test(text)).toBe(true);
+    }
   });
 
   it("неоднозначность сохраняется, пустая становится null", () => {
