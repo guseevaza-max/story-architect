@@ -8,6 +8,8 @@
  *  - monthKey, estimateReserveUsd, aggregateUsage.
  */
 
+import { AI_LIMITS } from "./limits";
+
 export const DEFAULT_MONTHLY_LIMIT_USD = 50;
 export const DEFAULT_WARN_PERCENT = 80;
 /** Резерв, если тариф модели неизвестен: консервативная сумма за один вызов. */
@@ -89,14 +91,9 @@ export function monthKey(date: Date): string {
 }
 
 /** Типичные размеры запросов для резерва (верхняя граница, а не среднее). */
-export const ROLE_ESTIMATES: Record<string, { inputTokens: number; outputTokens: number }> = {
-  SCENE_PLANNER: { inputTokens: 16_000, outputTokens: 10_000 },
-  WRITER: { inputTokens: 30_000, outputTokens: 20_000 },
-  REVISE: { inputTokens: 30_000, outputTokens: 20_000 },
-  STORY_ARCHITECT: { inputTokens: 30_000, outputTokens: 12_000 },
-  MEMORY_EXTRACTION: { inputTokens: 30_000, outputTokens: 10_000 },
-  LORE_EXTRACTION: { inputTokens: 20_000, outputTokens: 14_000 },
-};
+export const ROLE_ESTIMATES: Record<string, { inputTokens: number; outputTokens: number }> = Object.fromEntries(
+  Object.entries(AI_LIMITS).map(([role, l]) => [role, { inputTokens: l.typicalInputTokens, outputTokens: l.maxOutputTokens }])
+);
 export const DEFAULT_ESTIMATE = { inputTokens: 25_000, outputTokens: 16_000 };
 
 export function estimateReserveUsd(
@@ -132,6 +129,8 @@ export type UsageRow = {
   outputTokens: number | null;
   cachedTokens: number | null;
   estimatedCost: number | null;
+  /** Оценка для лимита по вызовам с неизвестной стоимостью (резерв), не факт. */
+  assumedCost?: number | null;
 };
 
 export type UsageGroup = {
@@ -142,6 +141,8 @@ export type UsageGroup = {
   knownCostUsd: number;
   /** Вызовы, стоимость которых неизвестна (не учтены в сумме). */
   unknownCostCalls: number;
+  /** Оценочная сумма, учтённая в лимите по таким вызовам. Не фактический расход. */
+  assumedCostUsd: number;
   inputTokens: number;
   outputTokens: number;
   cachedTokens: number;
@@ -161,6 +162,7 @@ const emptyGroup = (key: string): UsageGroup => ({
   failedCalls: 0,
   knownCostUsd: 0,
   unknownCostCalls: 0,
+  assumedCostUsd: 0,
   inputTokens: 0,
   outputTokens: 0,
   cachedTokens: 0,
@@ -172,6 +174,7 @@ function add(group: UsageGroup, row: UsageRow) {
   if (row.estimatedCost === null) {
     // Неудавшийся вызов без токенов ничего не стоил; остальные: стоимость неизвестна.
     if (row.status !== "FAILED") group.unknownCostCalls += 1;
+    if (row.assumedCost != null) group.assumedCostUsd = round6(group.assumedCostUsd + row.assumedCost);
   } else {
     group.knownCostUsd = round6(group.knownCostUsd + row.estimatedCost);
   }

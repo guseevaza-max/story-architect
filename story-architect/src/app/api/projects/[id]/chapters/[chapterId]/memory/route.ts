@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall, runCostFields, type RunRecord } from "@/lib/ai/budget";
 import { prisma as sharedPrisma } from "@/lib/db";
+import { limitsFor } from "@/lib/ai/limits";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
@@ -202,6 +203,7 @@ CHARACTER:
     const aiResponse =
       await openai.responses.create({
         model: "gpt-5.6-luna",
+        max_output_tokens: limitsFor("MEMORY_EXTRACTION").maxOutputTokens,
         input: [
           {
             role: "system",

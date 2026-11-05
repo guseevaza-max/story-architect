@@ -6,6 +6,8 @@ import { auth } from "@/auth";
 import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
 import { buildStoryState } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
+import { InputTooLargeError, inputEstimate, limitsFor } from "@/lib/ai/limits";
 
 type ContinuityIssueFromAI = {
   severity: "HIGH" | "MEDIUM" | "LOW";
@@ -255,9 +257,21 @@ ${storyState}${authorBlock}
 ${chapter.draftText}
 `;
 
-    // 10. OpenAI
-    const response = await openai.responses.create({
+    // 10. OpenAI. Учёт расходов, месячный лимит и потолки токенов.
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(prisma),
+      {
+        userId: session.user.id,
+        projectId: project.id,
+        roleKey: "CONTINUITY_CHECK",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        estimate: inputEstimate("CONTINUITY_CHECK", systemPrompt + userPrompt),
+      },
+      async () => {
+    const aiResponse = await openai.responses.create({
       model: "gpt-5.6-luna",
+      max_output_tokens: limitsFor("CONTINUITY_CHECK").maxOutputTokens,
       input: [
         {
           role: "system",
@@ -326,6 +340,9 @@ ${chapter.draftText}
         },
       },
     });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
 
     // 11. Получаем AI output
     const output = response.output_text?.trim();
@@ -457,6 +474,18 @@ ${chapter.draftText}
       },
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
+    if (error instanceof InputTooLargeError) {
+      return NextResponse.json(
+        { error: error.message, code: "INPUT_TOO_LARGE" },
+        { status: 413 }
+      );
+    }
     console.error("Continuity check error:", error);
 
     const message =

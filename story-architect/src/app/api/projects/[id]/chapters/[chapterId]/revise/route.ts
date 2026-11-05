@@ -5,6 +5,7 @@ import { splitAuthorNotes } from "@/lib/authorIntent/prompt";
 import { buildStoryState } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
+import { limitsFor } from "@/lib/ai/limits";
 import {
   MAX_REVISE_CHARS,
   buildReviseMessages,
@@ -145,6 +146,7 @@ export async function POST(
       async (ctx) => {
         const stream = getOpenAIClient().responses.stream({
           model: MODEL,
+          max_output_tokens: limitsFor("REVISE").maxOutputTokens,
           input: [
             { role: "system", content: system },
             { role: "user", content: user },
@@ -156,6 +158,13 @@ export async function POST(
         return { value: final, usage: final.usage };
       }
     );
+
+    if (response.status === "incomplete") {
+      return NextResponse.json(
+        { error: "Ответ модели обрезан лимитом длины. Версия не предложена, повторите запуск." },
+        { status: 502 }
+      );
+    }
 
     const raw = response.output_text?.trim();
     if (!raw) {

@@ -7,6 +7,7 @@ import {
   monthKey,
   normalizeUsage,
   pickPrice,
+  ROLE_ESTIMATES,
   type ModelPrice,
   type UsageRow,
 } from "../src/lib/ai/usage";
@@ -186,7 +187,7 @@ describe("runTrackedAiCall", () => {
   });
 
   it("параллельные запросы: принято ровно столько, сколько влезает в лимит", async () => {
-    const reserve = estimateReserveUsd(luna, { inputTokens: 16_000, outputTokens: 10_000 }); // 0.0152
+    const reserve = estimateReserveUsd(luna, ROLE_ESTIMATES.SCENE_PLANNER!);
     const limit = reserve * 5 + reserve / 2; // влезает 5
     const { deps, s } = makeDeps({ limit });
     let executed = 0;

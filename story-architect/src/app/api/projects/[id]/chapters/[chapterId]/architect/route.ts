@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall, runCostFields, type RunRecord } from "@/lib/ai/budget";
 import { prisma as sharedPrisma } from "@/lib/db";
+import { limitsFor } from "@/lib/ai/limits";
 import {
   PrismaClient,
   AiRunStatus,
@@ -488,6 +489,7 @@ TASK
       async () => {
     const aiResponse = await openai.chat.completions.create({
       model: "gpt-5.6-luna",
+      max_completion_tokens: limitsFor("STORY_ARCHITECT").maxOutputTokens,
       messages: [
         {
           role: "system",

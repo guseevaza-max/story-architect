@@ -110,6 +110,8 @@ export type RunRecord = {
   outputTokens: number | null;
   cachedTokens: number | null;
   estimatedCostUsd: number | null;
+  /** Оценка для лимита (резерв), когда фактическая стоимость неизвестна. Не факт. */
+  assumedCostUsd: number | null;
   costStatus: "KNOWN" | "UNKNOWN";
   costNote: string | null;
   durationMs: number;
@@ -163,6 +165,7 @@ export function runCostFields(run: RunRecord | null): {
   costStatus?: string;
   costNote?: string | null;
   estimatedCost?: number | null;
+  assumedCost?: number | null;
 } {
   if (!run) return {};
   return {
@@ -170,6 +173,7 @@ export function runCostFields(run: RunRecord | null): {
     costStatus: run.costStatus,
     costNote: run.costNote,
     estimatedCost: run.estimatedCostUsd,
+    assumedCost: run.assumedCostUsd,
   };
 }
 
@@ -261,6 +265,7 @@ export async function runTrackedAiCall<T>(
       outputTokens: null,
       cachedTokens: null,
       estimatedCostUsd: null,
+      assumedCostUsd: billable ? reserveUsd : null,
       costStatus: "UNKNOWN",
       costNote: billable
         ? "Ответ оборвался после начала: токены не получены, в лимит учтён резерв"
@@ -289,6 +294,7 @@ export async function runTrackedAiCall<T>(
     outputTokens: usage?.outputTokens ?? null,
     cachedTokens: usage?.cachedTokens ?? null,
     estimatedCostUsd: known ? cost.costUsd : null,
+    assumedCostUsd: known ? null : reserveUsd,
     costStatus: known ? "KNOWN" : "UNKNOWN",
     costNote: known ? null : cost.reason === "NO_USAGE" ? "Провайдер не вернул usage" : "Тариф модели не найден",
     durationMs: deps.now().getTime() - startedAt.getTime(),
@@ -332,6 +338,7 @@ export function createPrismaTrackingDeps(prisma: PrismaClient): TrackingDeps {
           outputTokens: run.outputTokens,
           cachedTokens: run.cachedTokens,
           estimatedCost: run.estimatedCostUsd,
+          assumedCost: run.assumedCostUsd,
           costStatus: run.costStatus,
           costNote: run.costNote,
           durationMs: run.durationMs,

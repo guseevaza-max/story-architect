@@ -59,6 +59,7 @@ export async function loadUsageOverview(prisma: PrismaClient, userId: string, mo
         outputTokens: true,
         cachedTokens: true,
         estimatedCost: true,
+        assumedCost: true,
       },
       orderBy: { createdAt: "asc" },
       take: 20000,
@@ -67,7 +68,11 @@ export async function loadUsageOverview(prisma: PrismaClient, userId: string, mo
   ]);
 
   const report = aggregateUsage(
-    runs.map((r) => ({ ...r, estimatedCost: r.estimatedCost === null ? null : Number(r.estimatedCost) }))
+    runs.map((r) => ({
+      ...r,
+      estimatedCost: r.estimatedCost === null ? null : Number(r.estimatedCost),
+      assumedCost: r.assumedCost === null ? null : Number(r.assumedCost),
+    }))
   );
 
   const projects = await prisma.project.findMany({

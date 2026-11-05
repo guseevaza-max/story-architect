@@ -146,6 +146,31 @@ enum BeatDisclosure {
   REVEALED
 }
 
+// ─────────────────── СОАВТОР (Creative Intelligence) ───────────────────
+
+enum CoauthorScope {
+  PROJECT // вся книга / проект
+  TOPIC // свободная тема
+  CHAPTER // обсуждение конкретной главы
+}
+
+enum CoauthorRole {
+  AUTHOR
+  COAUTHOR
+}
+
+// Режим беседы: обычное обсуждение или строгий «Сценарный критик» (структурированный отчёт).
+enum CoauthorMode {
+  DISCUSSION
+  CRITIC
+}
+
+// Уровень модели: Luna по умолчанию, Terra по явному выбору. Sol не используется.
+enum CoauthorTier {
+  LUNA
+  TERRA
+}
+
 enum FactSource {
   AUTHOR
   AI_EXTRACTION
@@ -164,6 +189,7 @@ model User {
   aiRuns       AiRun[]
   aiBudget       AiBudget?
   aiBudgetMonths AiBudgetMonth[]
+  coauthorThreads CoauthorThread[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -210,6 +236,7 @@ model Project {
   bibleVersions StoryBibleVersion[]
   loreMaterials LoreMaterial[]
   plotBeats     PlotBeat[]
+  coauthorThreads CoauthorThread[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -275,6 +302,7 @@ model Chapter {
   chapterSummary    ChapterSummary?
   versions          ChapterVersion[]
   memoryChunks      MemoryChunk[]
+  coauthorThreads   CoauthorThread[]
 
   approvedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -912,6 +940,8 @@ model AiRun {
   provider   String?
   costStatus String? // KNOWN | UNKNOWN
   costNote   String? // почему стоимость неизвестна
+  // Оценка для лимита (резерв) при неизвестной стоимости. Это не фактический расход.
+  assumedCost Decimal? @db.Decimal(12, 6)
 
   contextSize  Int?
   contextDebug Json? // разбивка токенов по слоям Context Pack
@@ -1108,4 +1138,74 @@ model AiBudgetMonth {
   updatedAt        DateTime @updatedAt
 
   @@unique([userId, month])
+}
+
+// ─────────────────── COAUTHOR ───────────────────
+
+// Беседа автора с Соавтором. Хранится бессрочно, пока автор не удалит её явно.
+// Соавтор пишет только сюда и в учёт ИИ (AiRun); Canon, Proposal, главы и
+// сюжетную карту он не меняет.
+model CoauthorThread {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title String
+  scope CoauthorScope @default(TOPIC)
+  // при удалении главы беседа остаётся
+  chapterId String?
+  chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
+  defaultTier CoauthorTier @default(LUNA)
+  mode        CoauthorMode @default(DISCUSSION)
+  archivedAt  DateTime?
+
+  // Сжатая ранняя часть длинной беседы (по явной команде автора). Это пересказ
+  // обсуждения, а не Canon. Сообщения до summaryUpToAt остаются в базе.
+  summary          String?
+  summaryUpToAt    DateTime?
+  summaryUpdatedAt DateTime?
+
+  messages CoauthorMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, userId, archivedAt, updatedAt])
+  @@index([chapterId])
+}
+
+model CoauthorMessage {
+  id       String         @id @default(cuid())
+  threadId String
+  thread   CoauthorThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  role CoauthorRole
+  text String
+
+  // для ответов Соавтора
+  tier     CoauthorTier?
+  provider String?
+  model    String?
+  // учёт расходов: ссылка на AiRun (без связи, запись учёта живёт отдельно)
+  aiRunId  String?
+
+  // структурированный отчёт «Сценарного критика» (text содержит его читаемую версию)
+  report Json?
+
+  // ответ затрагивает сюжетные тайны (в интерфейсе по умолчанию сворачивается)
+  containsSpoiler Boolean @default(false)
+
+  // выделенный фрагмент главы, приложенный к сообщению автора (только как контекст)
+  fragmentChapterId String?
+  fragmentText      String?
+  fragmentStart     Int?
+  fragmentEnd       Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
+  @@index([aiRunId])
 }

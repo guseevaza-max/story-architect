@@ -8,7 +8,10 @@ import {
   type BudgetStore,
   type TrackingDeps,
 } from "../src/lib/ai/budget";
-import { computeCost, normalizeUsage } from "../src/lib/ai/usage";
+import { ROLE_ESTIMATES, computeCost, estimateReserveUsd, normalizeUsage } from "../src/lib/ai/usage";
+
+const lunaPrice = { inputPer1M: 0.2, outputPer1M: 1.2, cachedInputPer1M: 0.02, effectiveFrom: new Date("2026-01-01") };
+const RESERVE = estimateReserveUsd(lunaPrice, ROLE_ESTIMATES.SCENE_PLANNER!);
 
 /** Аудит AI Usage: сценарии, на которых учёт мог бы тихо сломаться. */
 
@@ -54,7 +57,7 @@ describe("старые записи: почему стоимость неизв�
 
 describe("неизвестная стоимость и лимит", () => {
   it("вызовы без usage не бесплатны: серия таких вызовов упирается в лимит", async () => {
-    const d = deps(0.05, luna); // резерв SCENE_PLANNER ≈ 0.0152
+    const d = deps(RESERVE * 3.5, luna);
     let ok = 0;
     for (let i = 0; i < 10; i++) {
       try {
@@ -64,7 +67,7 @@ describe("неизвестная стоимость и лимит", () => {
         expect(e).toBeInstanceOf(BudgetExceededError);
       }
     }
-    expect(ok).toBe(3); // 3 × 0.0152 ≤ 0.05 < 4 × 0.0152
+    expect(ok).toBe(3); // 3 резерва помещаются, 4-й нет
   });
 
   it("то же без тарифа: резерв-запас, а не ноль", async () => {
@@ -82,9 +85,9 @@ describe("неизвестная стоимость и лимит", () => {
   });
 
   it("известная малая стоимость освобождает остаток резерва", async () => {
-    // Резерв 0.0152, фактически ~0.0003. Если бы резерв не освобождался,
-    // второй вызов уже упёрся бы в лимит 0.02.
-    const d = deps(0.02, luna);
+    // Фактически ~0.0003 на вызов. Если бы резерв не освобождался,
+    // второй вызов уже упёрся бы в лимит 1.5 резерва.
+    const d = deps(RESERVE * 1.5, luna);
     for (let i = 0; i < 10; i++) {
       await runTrackedAiCall(d, opts, async () => ({ value: 1, usage: { input_tokens: 1000, output_tokens: 100 } }));
     }
@@ -134,11 +137,11 @@ describe("реестр ИИ-маршрутов", () => {
   // Любой новый файл с вызовом модели должен быть внесён сюда сознательно.
   // tracked = защищён бюджетом и пишет стоимость через runTrackedAiCall.
   const REGISTRY: Record<string, boolean> = {
-    "src/app/api/ai/analyze/route.ts": false,
+    "src/app/api/ai/analyze/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts": true,
-    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts": false,
-    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts": false,
-    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts": false,
+    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts": true,
+    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts": true,
+    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/memory/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/revise/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/scene-planner/route.ts": true,
@@ -160,6 +163,33 @@ describe("реестр ИИ-маршрутов", () => {
 
   it("помеченные как защищённые действительно используют runTrackedAiCall", () => {
     for (const [file, tracked] of Object.entries(REGISTRY)) {
+      expect(readFileSync(file, "utf8").includes("runTrackedAiCall"), file).toBe(tracked);
+    }
+  });
+});
+
+describe("реестр ИИ-вызовов вне маршрутов (src/lib)", () => {
+  // Вызов модели, вынесенный в библиотеку, тоже должен быть учтён сознательно.
+  const LIB_REGISTRY: Record<string, boolean> = {
+    "src/lib/coauthor/service.ts": true,
+  };
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((f) => {
+      const p = join(dir, f);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : [];
+    });
+  const callers = walk("src/lib")
+    .map((f) => f.replace(/\\/g, "/"))
+    // слой провайдера сам вызывает модель; бюджет оборачивают его потребители
+    .filter((f) => !f.startsWith("src/lib/ai/"))
+    .filter((f) => /responses\.(create|stream)\(|chat\.completions\.create\(|\bcomplete\(/.test(readFileSync(f, "utf8")));
+
+  it("все вызовы модели в lib учтены в реестре", () => {
+    expect(callers.sort()).toEqual(Object.keys(LIB_REGISTRY).sort());
+  });
+
+  it("помеченные как защищённые используют runTrackedAiCall", () => {
+    for (const [file, tracked] of Object.entries(LIB_REGISTRY)) {
       expect(readFileSync(file, "utf8").includes("runTrackedAiCall"), file).toBe(tracked);
     }
   });

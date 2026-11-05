@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { COAUTHOR_ATTACH_EVENT, type AttachDetail } from "@/lib/coauthor/ui";
 import {
   formatMark,
   parseEditorMarks,
@@ -82,6 +83,27 @@ export default function DraftEditor({
     setError("");
     setMarkComment("");
     setPending({ kind, start, end, fragment: text.slice(start, end) });
+  }
+
+  /** Отправляет выделенный фрагмент в панель Соавтора. Текст главы не меняется. */
+  function discussWithCoauthor() {
+    const field = textareaRef.current;
+    if (!field) return;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    if (start === end) {
+      setError("Сначала выдели в тексте фрагмент, который нужно обсудить с Соавтором.");
+      return;
+    }
+    setError("");
+    const detail: AttachDetail = {
+      chapterId,
+      text: text.slice(start, end),
+      start,
+      end,
+      unsaved: !saved && text !== initialText,
+    };
+    window.dispatchEvent(new CustomEvent(COAUTHOR_ATTACH_EVENT, { detail }));
   }
 
   function confirmMark() {
@@ -270,6 +292,14 @@ export default function DraftEditor({
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={discussWithCoauthor}
+            title="Откроет панель Соавтора с выделенным фрагментом. Текст главы не изменится."
+            style={{ padding: "8px 12px", border: "1px solid #9bb7d4", borderRadius: 8, background: "#f4f7fb", cursor: "pointer", fontSize: 13 }}
+          >
+            🤝 Обсудить с Соавтором
+          </button>
         </div>
 
         {pending && (

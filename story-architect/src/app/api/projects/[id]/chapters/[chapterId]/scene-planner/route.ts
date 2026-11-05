@@ -6,6 +6,7 @@ import { buildStoryState } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
 import { prisma as sharedPrisma } from "@/lib/db";
+import { limitsFor } from "@/lib/ai/limits";
 
 const prisma = new PrismaClient();
 
@@ -118,6 +119,7 @@ params,
       async () => {
     const aiResponse = await openai.responses.create({
       model: "gpt-5.6-luna",
+      max_output_tokens: limitsFor("SCENE_PLANNER").maxOutputTokens,
 
       input: [
         {

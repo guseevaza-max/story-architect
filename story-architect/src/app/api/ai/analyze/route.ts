@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getOpenAIClient } from "@/lib/ai/provider";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
+import { InputTooLargeError, inputEstimate, limitsFor } from "@/lib/ai/limits";
+import { prisma } from "@/lib/db";
 
 const analysisSchema = {
   type: "object",
@@ -149,10 +152,43 @@ export async function POST(request: Request) {
       );
     }
 
-    const openai = getOpenAIClient();
+    // Проект нужен для учёта расходов. Клиент передаёт projectId; без него
+    // (старый клиент) лимит по-прежнему действует, но строка AiRun не создаётся.
+    let projectId: string | null = null;
+    if (typeof body.projectId === "string" && body.projectId) {
+      const owned = await prisma.project.findFirst({
+        where: { id: body.projectId, userId: session.user.id },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: "Проект не найден" }, { status: 404 });
+      }
+      projectId = owned.id;
+    }
 
-    const response = await openai.responses.create({
+    const openai = getOpenAIClient();
+    const userContent = `Проанализируй вселенную и разложи информацию по категориям.
+
+Текст автора:
+
+${text}`;
+
+    // Учёт расходов, месячный лимит и потолки токенов.
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(prisma),
+      {
+        userId: session.user.id,
+        projectId: projectId ?? "",
+        roleKey: "STORY_BIBLE_ANALYZE",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        estimate: inputEstimate("STORY_BIBLE_ANALYZE", ANALYSIS_SYSTEM_PROMPT + userContent),
+        skipRecord: !projectId,
+      },
+      async () => {
+    const aiResponse = await openai.responses.create({
       model: "gpt-5.6-luna",
+      max_output_tokens: limitsFor("STORY_BIBLE_ANALYZE").maxOutputTokens,
       input: [
         {
           role: "system",
@@ -160,11 +196,7 @@ export async function POST(request: Request) {
         },
         {
           role: "user",
-          content: `Проанализируй вселенную и разложи информацию по категориям.
-
-Текст автора:
-
-${text}`,
+          content: userContent,
         },
       ],
       text: {
@@ -176,6 +208,9 @@ ${text}`,
         },
       },
     });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
 
     const result = JSON.parse(response.output_text);
 
@@ -184,6 +219,18 @@ ${text}`,
       result,
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
+    if (error instanceof InputTooLargeError) {
+      return NextResponse.json(
+        { error: error.message, code: "INPUT_TOO_LARGE" },
+        { status: 413 }
+      );
+    }
     console.error("AI analyze error:", error);
 
     return NextResponse.json(

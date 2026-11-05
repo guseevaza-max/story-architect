@@ -23,8 +23,8 @@ function Table({ title, groups, label }: { title: string; groups: UsageGroup[]; 
             <tr>
               <th style={th}>Название</th>
               <th style={th}>Вызовов</th>
-              <th style={th}>Известная стоимость</th>
-              <th style={th}>Стоимость неизвестна</th>
+              <th style={th}>Фактическая стоимость</th>
+              <th style={th}>Стоимость неизвестна (вызовов / оценка для лимита)</th>
               <th style={th}>Токены (вход / кэш / выход)</th>
             </tr>
           </thead>
@@ -34,7 +34,7 @@ function Table({ title, groups, label }: { title: string; groups: UsageGroup[]; 
                 <td style={td}>{label ? label(g.key) : g.key}</td>
                 <td style={td}>{g.calls}{g.failedCalls ? ` (ошибок: ${g.failedCalls})` : ""}</td>
                 <td style={td}>{usd(g.knownCostUsd)}</td>
-                <td style={td}>{g.unknownCostCalls ? `${g.unknownCostCalls} выз.` : "—"}</td>
+                <td style={td}>{g.unknownCostCalls || g.assumedCostUsd ? `${g.unknownCostCalls} выз. / ≈${usd(g.assumedCostUsd)} (оценка, не факт)` : "—"}</td>
                 <td style={td}>{g.inputTokens} / {g.cachedTokens} / {g.outputTokens}</td>
               </tr>
             ))}

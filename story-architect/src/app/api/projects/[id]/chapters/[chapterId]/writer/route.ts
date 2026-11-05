@@ -7,6 +7,7 @@ import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 import { loadNarrativeContext } from "@/lib/plotMap/loadNarrative";
 import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
+import { limitsFor } from "@/lib/ai/limits";
 
 export async function POST(
   request: Request,
@@ -187,6 +188,7 @@ params,
       async () => {
     const aiResponse = await openai.responses.create({
       model: "gpt-5.6-luna",
+      max_output_tokens: limitsFor("WRITER").maxOutputTokens,
       input: [
         {
           role: "system",
@@ -251,6 +253,14 @@ ${JSON.stringify(scenes, null, 2)}
     return { value: aiResponse, usage: aiResponse.usage };
       }
     );
+
+    // Ответ обрезан потолком длины: неполную главу не сохраняем как черновик.
+    if (response.status === "incomplete") {
+      return NextResponse.json(
+        { error: "Ответ модели обрезан лимитом длины. Черновик не сохранён, повторите запуск." },
+        { status: 502 }
+      );
+    }
 
     const rawDraft = response.output_text?.trim(); if (!rawDraft) {
       return NextResponse.json(

@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
+import { InputTooLargeError, inputEstimate, limitsFor } from "@/lib/ai/limits";
+import { prisma as sharedPrisma } from "@/lib/db";
 
 const prisma = new PrismaClient();
 
@@ -170,9 +173,22 @@ ${JSON.stringify(
 Верни только JSON.
 `;
 
-    const response =
+    // Учёт расходов, месячный лимит и потолки токенов.
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(sharedPrisma),
+      {
+        userId: session.user.id,
+        projectId: project.id,
+        roleKey: "CONTINUITY_SUGGESTIONS",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        estimate: inputEstimate("CONTINUITY_SUGGESTIONS", prompt),
+      },
+      async () => {
+    const aiResponse =
       await openai.chat.completions.create({
         model: "gpt-5.6-luna",
+        max_completion_tokens: limitsFor("CONTINUITY_SUGGESTIONS").maxOutputTokens,
 
         messages: [
           {
@@ -275,6 +291,9 @@ ${JSON.stringify(
           },
         },
       });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
 
     const content =
       response.choices[0]?.message?.content;
@@ -315,6 +334,18 @@ ${JSON.stringify(
         result.suggestions ?? [],
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
+    if (error instanceof InputTooLargeError) {
+      return NextResponse.json(
+        { error: error.message, code: "INPUT_TOO_LARGE" },
+        { status: 413 }
+      );
+    }
     console.error(
       "Ошибка генерации предложений:",
       error

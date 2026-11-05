@@ -331,6 +331,9 @@ describe("Revise: потоковый учёт", () => {
     expect(h.settles[0][5]).toBe(1); // вызов с неизвестной стоимостью
     expect(h.aiRuns[0]).toMatchObject({ status: "FAILED", costStatus: "UNKNOWN" });
     expect(h.aiRuns[0].costNote).toContain("резерв");
+    // Оценка записана отдельно и не выдаётся за фактическую стоимость.
+    expect(h.aiRuns[0].estimatedCost ?? null).toBeNull();
+    expect(Number(h.aiRuns[0].assumedCost)).toBeGreaterThan(0);
   });
 
   it("отмена запроса после начала ответа: так же по резерву", async () => {
