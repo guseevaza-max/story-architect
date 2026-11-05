@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
-import { AiProviderError, complete, redact } from "@/lib/ai/provider";
+import {
+  AiProviderError,
+  complete,
+  describeCompletionTarget,
+  isMockMode,
+  redact,
+} from "@/lib/ai/provider";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
 import { prisma } from "@/lib/db";
 import {
   EXTRACTION_JSON_SCHEMA,
@@ -93,8 +100,8 @@ export async function POST(_request: Request, { params }: RouteContext) {
     let completion;
 
     try {
-      completion = await complete({
-        modelClass: "STRONG",
+      const request = {
+        modelClass: "STRONG" as const,
         temperature: 0.1,
         maxTokens: 12000,
         messages: buildExtractionMessages(title, source.text),
@@ -102,8 +109,36 @@ export async function POST(_request: Request, { params }: RouteContext) {
           name: string;
           schema: Record<string, unknown>;
         },
-      });
+      };
+
+      if (isMockMode()) {
+        // Режим заглушки: платных вызовов нет, учёт не нужен.
+        completion = await complete(request);
+      } else {
+        // Учёт расходов и месячный лимит. Провайдер и модель те же, что выберет complete().
+        const target = describeCompletionTarget(request.modelClass);
+        completion = await runTrackedAiCall(
+          createPrismaTrackingDeps(prisma),
+          {
+            userId: session.user.id,
+            projectId: project.id,
+            roleKey: "LORE_EXTRACTION",
+            provider: target.provider,
+            model: target.model,
+          },
+          async () => {
+            const result = await complete(request);
+            return { value: result, usage: result.rawUsage };
+          }
+        );
+      }
     } catch (error) {
+      if (error instanceof BudgetExceededError) {
+        return NextResponse.json(
+          { error: error.message, code: "BUDGET_EXCEEDED" },
+          { status: 429 }
+        );
+      }
       console.error("Lore extraction AI error:", error);
 
       return NextResponse.json(

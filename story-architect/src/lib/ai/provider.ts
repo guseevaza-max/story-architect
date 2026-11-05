@@ -37,6 +37,8 @@ export interface CompletionResult {
   finishReason?: string;
   estimatedCost: number;
   durationMs: number;
+  /** Сырой блок usage от провайдера (undefined, если провайдер его не вернул). */
+  rawUsage?: unknown;
 }
 
 interface ModelConfig {
@@ -312,7 +314,21 @@ export async function complete(
     finishReason,
     estimatedCost: estimateCost(req.modelClass, inputTokens, outputTokens),
     durationMs: Date.now() - started,
+    rawUsage: json.usage,
   };
+}
+
+/** Режим заглушки: реальных вызовов нет, платить нечему. */
+export function isMockMode(): boolean {
+  return env("AI_MOCK") === "true";
+}
+
+/**
+ * Провайдер и модель, которые будет использовать complete() для класса модели.
+ * Нужны до вызова: по ним выбирается тариф и считается резерв бюджета.
+ */
+export function describeCompletionTarget(cls: ModelClass): { provider: string; model: string } {
+  return { provider: resolveAiConfig().provider, model: modelConfig(cls).model || `class:${cls}` };
 }
 
 /** Убирает возможные ключи из строк перед логированием. */

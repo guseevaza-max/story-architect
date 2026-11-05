@@ -30,6 +30,9 @@ vi.mock("@/lib/ai/provider", () => {
 
   return {
     AiProviderError,
+    // Эти тесты проверяют извлечение; учёт расходов покрыт tests/ai-usage-p30.test.ts.
+    isMockMode: () => true,
+    describeCompletionTarget: () => ({ provider: "openai", model: "m" }),
     redact: (value: string) => value.replace(/sk-[A-Za-z0-9]+/g, "sk-***"),
     complete: async (req: any) => {
       h.completeCalls.push(req);

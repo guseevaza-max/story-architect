@@ -17,6 +17,7 @@ type ChapterPlan = {
   mustHappen?: string[];
   mustNotHappen?: string[];
   openQuestions?: string[];
+  authorAnswers?: { question: string; answer: string }[];
 };
 
 type Scene = {
@@ -140,9 +141,43 @@ export default function ProposalsPage() {
     }
   }, [projectId]);
 
+  // Ответы автора на открытые вопросы плана главы: proposalId -> индекс вопроса -> текст.
+  const [answers, setAnswers] =
+    useState<Record<string, Record<number, string>>>({});
+
+  function setAnswer(proposalId: string, index: number, value: string) {
+    setAnswers((current) => ({
+      ...current,
+      [proposalId]: { ...(current[proposalId] ?? {}), [index]: value },
+    }));
+  }
+
+  function collectAnswers(proposal: Proposal) {
+    const questions: string[] = proposal.payload?.openQuestions ?? [];
+    const typed = answers[proposal.id] ?? {};
+    return questions
+      .map((question, index) => ({
+        question,
+        answer: (typed[index] ?? "").trim(),
+      }))
+      .filter((item) => item.answer);
+  }
+
+  function acceptChapterPlan(proposal: Proposal) {
+    const collected = collectAnswers(proposal);
+    if (collected.length === 0) {
+      return handleAction(proposal.id, "ACCEPT");
+    }
+    return handleAction(proposal.id, "EDIT_AND_ACCEPT", {
+      ...proposal.payload,
+      authorAnswers: collected,
+    });
+  }
+
   async function handleAction(
     proposalId: string,
-    action: "ACCEPT" | "REJECT"
+    action: "ACCEPT" | "REJECT" | "EDIT_AND_ACCEPT",
+    editedPayload?: unknown
   ) {
     try {
       setProcessingId(proposalId);
@@ -158,6 +193,7 @@ export default function ProposalsPage() {
           },
           body: JSON.stringify({
             action,
+            ...(editedPayload !== undefined ? { editedPayload } : {}),
           }),
         }
       );
@@ -424,10 +460,50 @@ export default function ProposalsPage() {
           "🚫"
         )}
 
-        {renderList(
-          "Открытые вопросы",
-          plan.openQuestions,
-          "❓"
+        {plan.openQuestions && plan.openQuestions.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <h3 style={{ margin: "0 0 6px" }}>❓ Открытые вопросы</h3>
+            <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
+              Можно ответить на любой вопрос. Ответ сохранится вместе с планом и
+              будет учтён при планировании сцен и написании. Пустые вопросы
+              остаются открытыми.
+            </p>
+
+            {plan.openQuestions.map((question, index) => (
+              <div
+                key={index}
+                style={{
+                  marginBottom: 12,
+                  padding: 14,
+                  borderRadius: 10,
+                  background: "#f8f8f8",
+                }}
+              >
+                <div style={{ lineHeight: 1.6 }}>{question}</div>
+                <textarea
+                  value={answers[proposal.id]?.[index] ?? ""}
+                  onChange={(event) =>
+                    setAnswer(proposal.id, index, event.target.value)
+                  }
+                  placeholder="Твой ответ (необязательно)"
+                  rows={3}
+                  maxLength={4000}
+                  style={{
+                    width: "100%",
+                    marginTop: 10,
+                    padding: 10,
+                    boxSizing: "border-box",
+                    border: "1px solid #ccc",
+                    borderRadius: 8,
+                    fontFamily: "inherit",
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     );
@@ -1198,10 +1274,12 @@ export default function ProposalsPage() {
                           isProcessing
                         }
                         onClick={() =>
-                          handleAction(
-                            proposal.id,
-                            "ACCEPT"
-                          )
+                          isChapterPlan
+                            ? acceptChapterPlan(proposal)
+                            : handleAction(
+                                proposal.id,
+                                "ACCEPT"
+                              )
                         }
                         style={{
                           padding:

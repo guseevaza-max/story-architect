@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
 import { buildStoryState } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
+import { prisma as sharedPrisma } from "@/lib/db";
 
 const prisma = new PrismaClient();
 
@@ -102,7 +104,19 @@ params,
       "scene_planner"
     );
 
-    const response = await openai.responses.create({
+    // Пилот AI Usage: учёт токенов и стоимости и проверка месячного лимита.
+    // Запрос к модели не менялся.
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(sharedPrisma),
+      {
+        userId: session.user.id,
+        projectId: project.id,
+        roleKey: "SCENE_PLANNER",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+      },
+      async () => {
+    const aiResponse = await openai.responses.create({
       model: "gpt-5.6-luna",
 
       input: [
@@ -240,6 +254,9 @@ ${JSON.stringify(chapterPlan, null, 2)}
         },
       },
     });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
 
     const outputText = response.output_text;
 
@@ -298,6 +315,12 @@ ${JSON.stringify(chapterPlan, null, 2)}
       proposalId: proposal.id,
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
     console.error("Scene Planner error:", error);
 
     return NextResponse.json(

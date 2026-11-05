@@ -25,6 +25,10 @@ import {
 } from "@/lib/schemas/loreFact";
 import { planRelationshipMerge } from "./relationshipMerge";
 import { splitMemoryBySafety } from "./memorySafety";
+import {
+  AuthorAnswersError,
+  normalizeAuthorAnswers,
+} from "@/lib/chapters/planAnswers";
 
 
 
@@ -138,7 +142,7 @@ function toRequiredInputJson(
 
  */
 
-function parseChapterPlan(value: unknown) {
+export function parseChapterPlan(value: unknown) {
 
   if (!value || typeof value !== "object") {
 
@@ -254,7 +258,27 @@ function parseChapterPlan(value: unknown) {
 
 
 
-  return plan;
+  // Ответы автора на открытые вопросы (необязательное поле).
+  let authorAnswers;
+  try {
+    authorAnswers = normalizeAuthorAnswers(
+      plan.authorAnswers,
+      Array.isArray(plan.openQuestions)
+        ? (plan.openQuestions as string[])
+        : []
+    );
+  } catch (error) {
+    if (error instanceof AuthorAnswersError) {
+      throw new ProposalStateError(error.message);
+    }
+    throw error;
+  }
+
+  const { authorAnswers: _ignored, ...rest } = plan;
+  void _ignored;
+
+  return authorAnswers ? { ...rest, authorAnswers } : rest;
+
 
 }
 
@@ -2058,6 +2082,12 @@ export async function applyProposal(
             payload
 
           );
+
+        // Ответы автора принимаются только при правке самим автором.
+        if (action !== "EDIT_AND_ACCEPT") {
+          delete (parsedPlan as Record<string, unknown>).authorAnswers;
+        }
+
 
 
 

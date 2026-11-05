@@ -131,6 +131,21 @@ enum AiRunStatus {
   CANCELLED
 }
 
+// Степень утверждения сюжетной вехи автором.
+enum BeatApproval {
+  APPROVED // утверждено автором
+  APPROXIMATE // примерный план
+  IDEA // черновая идея
+}
+
+// Насколько информация вехи раскрыта читателю к моменту её наступления.
+enum BeatDisclosure {
+  HIDDEN
+  HINTED
+  PARTIAL
+  REVEALED
+}
+
 enum FactSource {
   AUTHOR
   AI_EXTRACTION
@@ -147,6 +162,8 @@ model User {
   name         String?
   projects     Project[]
   aiRuns       AiRun[]
+  aiBudget       AiBudget?
+  aiBudgetMonths AiBudgetMonth[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -192,6 +209,7 @@ model Project {
   canonFacts    CanonFact[]
   bibleVersions StoryBibleVersion[]
   loreMaterials LoreMaterial[]
+  plotBeats     PlotBeat[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -211,7 +229,13 @@ model Book {
   actualEnding  String?
   status        RecordStatus @default(DRAFT)
 
-  chapters Chapter[]
+  // сюжетная карта книги: темы, конфликты, авторские ограничения
+  themes            String?
+  centralConflicts  String?
+  authorConstraints String?
+
+  chapters  Chapter[]
+  plotBeats PlotBeat[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -611,6 +635,12 @@ model Secret {
   seededChapter         Int?
   lastReferencedChapter Int? // для старения зацепок (ТЗ §33)
 
+  // план раскрытия (сюжетная карта)
+  objectiveTruth       String? // объективная истина мира
+  hintFromChapter      Int? // с какой главы допустимы намёки
+  partialRevealChapter Int? // с какой главы допустимо частичное раскрытие
+  forbiddenEarly       String? // что категорически нельзя раскрывать раньше времени
+
   relatedCharacters Json?
   relatedEvents     Json?
   relatedPlotLines  Json?
@@ -676,6 +706,41 @@ model OpenQuestion {
   status    RecordStatus @default(UNKNOWN)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+}
+
+// ───────────────────── PLOT BEATS ─────────────────────
+
+// Сюжетная веха: ключевое событие замысла. Может существовать без номера
+// главы. Пишет только автор, AI веху не создаёт и не меняет.
+model PlotBeat {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  bookId    String?
+  book      Book?   @relation(fields: [bookId], references: [id], onDelete: SetNull)
+
+  order Int @default(0) // относительная последовательность
+
+  name              String
+  description       String?
+  narrativeFunction String? // сюжетная функция
+  characters        Json? // имена действующих персонажей (массив строк)
+  causes            String? // причинные предпосылки
+  consequences      String? // последствия для дальнейшей истории
+
+  plannedChapterFrom Int?
+  plannedChapterTo   Int?
+
+  approval   BeatApproval   @default(IDEA)
+  disclosure BeatDisclosure @default(HIDDEN)
+
+  relatedArcs Json? // названия связанных арок (массив строк)
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, bookId, order])
 }
 
 // ───────────────────── CANON FACTS ─────────────────────
@@ -843,6 +908,11 @@ model AiRun {
   cachedTokens  Int?
   estimatedCost Decimal? @db.Decimal(12, 6)
 
+  // учёт расходов (AI Usage): estimatedCost = null означает «стоимость неизвестна», а не ноль
+  provider   String?
+  costStatus String? // KNOWN | UNKNOWN
+  costNote   String? // почему стоимость неизвестна
+
   contextSize  Int?
   contextDebug Json? // разбивка токенов по слоям Context Pack
 
@@ -859,6 +929,7 @@ model AiRun {
 
   @@index([projectId, createdAt])
   @@index([projectId, roleKey])
+  @@index([userId, createdAt])
 }
 
 model ContinuityReport {
@@ -989,4 +1060,52 @@ model LoreMaterial {
   updatedAt DateTime @updatedAt
 
   @@index([projectId, updatedAt])
+}
+
+// ───────────────────────── AI USAGE ─────────────────────────
+
+// Тарифы моделей (USD за 1 млн токенов). Новая цена добавляется новой строкой
+// с более поздней effectiveFrom, прошлые записи учёта не пересчитываются.
+model AiModelPrice {
+  id               String   @id @default(cuid())
+  provider         String // openai | openrouter | ...
+  model            String
+  inputPer1M       Decimal  @db.Decimal(12, 6)
+  outputPer1M      Decimal  @db.Decimal(12, 6)
+  cachedInputPer1M Decimal? @db.Decimal(12, 6)
+  source           String? // откуда взята цена и когда проверена
+  effectiveFrom    DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@unique([provider, model, effectiveFrom])
+  @@index([provider, model, effectiveFrom])
+}
+
+// Месячный лимит расходов на ИИ для пользователя (по умолчанию 50 USD).
+model AiBudget {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyLimitUsd Decimal  @default(50) @db.Decimal(12, 4)
+  warnPercent     Int      @default(80)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Счётчик месяца. Изменяется только атомарными SQL-командами (резервирование
+// проверяет лимит в самом UPDATE, поэтому параллельные запросы безопасны).
+model AiBudgetMonth {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month            String // YYYY-MM по UTC
+  spentUsd         Decimal  @default(0) @db.Decimal(14, 6) // известная стоимость
+  assumedUsd       Decimal  @default(0) @db.Decimal(14, 6) // консервативный учёт вызовов с неизвестной стоимостью
+  reservedUsd      Decimal  @default(0) @db.Decimal(14, 6) // резерв выполняющихся вызовов
+  unknownCostCalls Int      @default(0)
+  callCount        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, month])
 }

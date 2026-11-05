@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import { revertsToApproved } from "@/lib/chapters/draftEdit";
+import { hasEditorMarks } from "@/lib/chapters/editorMarks";
 
 const prisma = new PrismaClient();
 
@@ -48,6 +50,8 @@ export async function PATCH(
       );
     }
 
+    let revertedToApproved = false;
+
     const data: {
       authorIdea?: string | null;
       draftText?: string | null;
@@ -88,6 +92,15 @@ export async function PATCH(
       );
 
       data.draftText = draftText;
+
+      // Правка после Canon: finalText устарел, нужно утвердить заново.
+      if (
+        !Object.prototype.hasOwnProperty.call(body, "status") &&
+        revertsToApproved(chapter, draftText)
+      ) {
+        data.status = "APPROVED";
+        revertedToApproved = true;
+      }
     }
 
     // =====================================================
@@ -106,6 +119,16 @@ export async function PATCH(
           {
             error:
               "Нельзя утвердить главу без текста черновика.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (hasEditorMarks(chapter.draftText)) {
+        return NextResponse.json(
+          {
+            error:
+              "В черновике остались пометки редактора. Нажми «Доработать по заметкам», чтобы AI их учёл, или убери пометки вручную.",
           },
           { status: 400 }
         );
@@ -175,6 +198,7 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       chapter: updatedChapter,
+      revertedToApproved,
     });
   } catch (error) {
     console.error(

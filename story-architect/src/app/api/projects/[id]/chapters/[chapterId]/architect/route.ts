@@ -1,5 +1,7 @@
 
 import { NextResponse } from "next/server";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall, runCostFields, type RunRecord } from "@/lib/ai/budget";
+import { prisma as sharedPrisma } from "@/lib/db";
 import {
   PrismaClient,
   AiRunStatus,
@@ -467,7 +469,24 @@ TASK
     // 11. OPENAI
     // =====================================================
 
-    const response = await openai.chat.completions.create({
+    // Учёт расходов и месячный лимит. Собственная запись AiRun ниже сохраняется,
+    // поэтому обёртка вторую строку не создаёт (skipRecord) и отдаёт стоимость.
+    let trackedRun = null as RunRecord | null;
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(sharedPrisma),
+      {
+        userId: session.user.id,
+        projectId: project.id,
+        roleKey: "STORY_ARCHITECT",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        skipRecord: true,
+        onResult: (run) => {
+          trackedRun = run;
+        },
+      },
+      async () => {
+    const aiResponse = await openai.chat.completions.create({
       model: "gpt-5.6-luna",
       messages: [
         {
@@ -542,6 +561,9 @@ TASK
         },
       },
     });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
 
     // =====================================================
     // 12. AI OUTPUT
@@ -570,6 +592,7 @@ TASK
         model: "gpt-5.6-luna",
         inputTokens: usage?.prompt_tokens ?? null,
         outputTokens: usage?.completion_tokens ?? null,
+        ...runCostFields(trackedRun),
         requestPayload: {
           chapterId: chapter.id,
           authorIdea: chapter.authorIdea,
@@ -647,6 +670,12 @@ TASK
       },
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
     console.error("Architect error:", error);
 
     return NextResponse.json(

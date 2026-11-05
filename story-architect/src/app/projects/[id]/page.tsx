@@ -121,6 +121,78 @@ export default async function ProjectPage({
           <strong>Открыть библиотеку →</strong>
         </Link>
 
+        {/* Canon */}
+        <Link
+          href={`/projects/${project.id}/canon`}
+          style={{
+            display: "block",
+            padding: 24,
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            textDecoration: "none",
+            color: "inherit",
+            background: "#fff",
+          }}
+        >
+          <h2>📖 Canon</h2>
+          <p>Все подтверждённые факты проекта с цитатами и источником.</p>
+          <strong>Открыть Canon →</strong>
+        </Link>
+
+        {/* Сюжетная карта */}
+        <Link
+          href={`/projects/${project.id}/plot-map`}
+          style={{
+            display: "block",
+            padding: 24,
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            textDecoration: "none",
+            color: "inherit",
+            background: "#fff",
+          }}
+        >
+          <h2>🗺️ Сюжетная карта</h2>
+          <p>Замысел книги, будущие вехи и тайны с планом раскрытия.</p>
+          <strong>Открыть карту →</strong>
+        </Link>
+
+        {/* Экспорт */}
+        <Link
+          href={`/projects/${project.id}/export`}
+          style={{
+            display: "block",
+            padding: 24,
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            textDecoration: "none",
+            color: "inherit",
+            background: "#fff",
+          }}
+        >
+          <h2>📄 Экспорт в PDF</h2>
+          <p>Написанные главы в виде книги: печать или сохранение в PDF.</p>
+          <strong>Открыть экспорт →</strong>
+        </Link>
+
+        {/* Расходы ИИ */}
+        <Link
+          href="/ai-usage"
+          style={{
+            display: "block",
+            padding: 24,
+            border: "1px solid #ccc",
+            borderRadius: 12,
+            textDecoration: "none",
+            color: "inherit",
+            background: "#fff",
+          }}
+        >
+          <h2>💰 Расходы ИИ</h2>
+          <p>Траты по функциям, моделям, дням и проектам. Месячный лимит.</p>
+          <strong>Открыть расходы →</strong>
+        </Link>
+
         {/* Story Bible */}
         <Link
           href={`/projects/${project.id}/story-bible`}

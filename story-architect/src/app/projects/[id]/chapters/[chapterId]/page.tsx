@@ -8,6 +8,7 @@ import SaveIdeaForm from "./SaveIdeaForm";
 import AuthorIntentPanel from "./AuthorIntentPanel";
 import ScenePlannerButton from "./ScenePlannerButton";
 import WriterButton from "./writerButton";
+import NarrativeContextPanel from "./NarrativeContextPanel";
 import ContinuityButton from "./ContinuityButton";
 import ContinuitySuggestionsButton from "./ContinuitySuggestionsButton";
 import DraftEditor from "./DraftEditor";
@@ -26,6 +27,7 @@ type ChapterPlan = {
   mustHappen?: string[];
   mustNotHappen?: string[];
   openQuestions?: string[];
+  authorAnswers?: { question: string; answer: string }[];
 };
 
 export default async function ChapterPage({
@@ -123,6 +125,8 @@ export default async function ChapterPage({
         <AuthorIntentPanel projectId={project.id} chapterId={chapter.id} />
       </section>
 
+      <NarrativeContextPanel projectId={project.id} chapterId={chapter.id} />
+
       {hasPlan && (
         <section style={{ border: "2px solid #d9c58b", borderRadius: 12, padding: 24, marginBottom: 16, background: "#fffdf5" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 20 }}>
@@ -141,7 +145,7 @@ export default async function ChapterPage({
           {plan?.characterDevelopment?.length ? <div style={{ marginBottom: 22 }}><h3>Развитие персонажей</h3><ul style={{ lineHeight: 1.6 }}>{plan.characterDevelopment.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
           {plan?.mustHappen?.length ? <div style={{ marginBottom: 22 }}><h3>Обязательно должно произойти</h3><ul style={{ lineHeight: 1.6 }}>{plan.mustHappen.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
           {plan?.mustNotHappen?.length ? <div style={{ marginBottom: 22 }}><h3>Не должно произойти</h3><ul style={{ lineHeight: 1.6 }}>{plan.mustNotHappen.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
-          {plan?.openQuestions?.length ? <div style={{ marginBottom: 22 }}><h3>Открытые вопросы</h3><ul style={{ lineHeight: 1.6 }}>{plan.openQuestions.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
+          {plan?.openQuestions?.length ? <div style={{ marginBottom: 22 }}><h3>Открытые вопросы</h3><ul style={{ lineHeight: 1.6 }}>{plan.openQuestions.map((item, index) => { const answer = plan.authorAnswers?.find((a) => a.question === item)?.answer; return <li key={index}>{item}{answer ? <div style={{ marginTop: 6, padding: 10, borderRadius: 8, background: "#eef7ee", border: "1px solid #c9e4c9" }}><strong>Ответ автора:</strong> {answer}</div> : null}</li>; })}</ul></div> : null}
 
           <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #ddd" }}>
             <h3 style={{ marginTop: 0, marginBottom: 8 }}>🎬 Следующий этап — план сцен</h3>

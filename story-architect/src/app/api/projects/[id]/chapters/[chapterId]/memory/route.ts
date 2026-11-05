@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall, runCostFields, type RunRecord } from "@/lib/ai/budget";
+import { prisma as sharedPrisma } from "@/lib/db";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
@@ -180,7 +182,24 @@ CHARACTER:
     // 8. AI MEMORY EXTRACTION
     // =====================================================
     const startedAt = Date.now();
-    const response =
+    // Учёт расходов и месячный лимит. Собственная запись AiRun ниже сохраняется,
+    // поэтому обёртка вторую строку не создаёт (skipRecord) и отдаёт токены и стоимость.
+    let trackedRun = null as RunRecord | null;
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(sharedPrisma),
+      {
+        userId: session.user.id,
+        projectId,
+        roleKey: "MEMORY_EXTRACTION",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        skipRecord: true,
+        onResult: (run) => {
+          trackedRun = run;
+        },
+      },
+      async () => {
+    const aiResponse =
       await openai.responses.create({
         model: "gpt-5.6-luna",
         input: [
@@ -544,6 +563,9 @@ ${chapterText}
           },
         },
       });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
     const outputText =
       response.output_text?.trim();
     if (!outputText) {
@@ -693,6 +715,10 @@ ${chapterText}
             "MEMORY_EXTRACTION",
           model:
             "gpt-5.6-luna",
+          inputTokens: trackedRun?.inputTokens ?? null,
+          outputTokens: trackedRun?.outputTokens ?? null,
+          cachedTokens: trackedRun?.cachedTokens ?? null,
+          ...runCostFields(trackedRun),
           status:
             "SUCCESS",
           requestPayload:
@@ -821,6 +847,12 @@ ${chapterText}
       relationshipChanges,
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
     console.error(
       "Memory extraction error:",
       error

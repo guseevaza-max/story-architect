@@ -5,6 +5,8 @@ import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
 import { splitAuthorNotes } from "@/lib/authorIntent/prompt";
 import { buildStoryState, memoryChunksBefore } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
+import { loadNarrativeContext } from "@/lib/plotMap/loadNarrative";
+import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
 
 export async function POST(
   request: Request,
@@ -89,7 +91,7 @@ params,
       chapterNumber: chapter.number,
     };
 
-    const [canonFacts, previousChapter, memoryChunks, storyState, authorBlock] =
+    const [canonFacts, previousChapter, memoryChunks, storyState, authorBlock, narrative] =
       await Promise.all([
       prisma.canonFact.findMany({
         where: {
@@ -141,6 +143,14 @@ params,
 
       // Авторский замысел главы и референсы (пустая строка, если не заданы).
       loadAuthorDirectionBlock(project.id, chapter.id, "writer"),
+
+      // Долгосрочный сюжетный контекст (сюжетная карта). Пустая карта даёт
+      // пустую строку, и запрос остаётся прежним.
+      loadNarrativeContext({
+        bookId: chapter.bookId,
+        number: chapter.number,
+        projectId: project.id,
+      }),
     ]);
 
     const canonContext = canonFacts.length
@@ -170,7 +180,12 @@ params,
       plannedOutcome: scene.plannedOutcome,
     }));
 
-    const response = await openai.responses.create({
+    // Учёт расходов и месячный лимит. Запрос к модели не менялся.
+    const response = await runTrackedAiCall(
+      createPrismaTrackingDeps(prisma),
+      { userId: session.user.id, projectId: project.id, roleKey: "WRITER", provider: "openai", model: "gpt-5.6-luna" },
+      async () => {
+    const aiResponse = await openai.responses.create({
       model: "gpt-5.6-luna",
       input: [
         {
@@ -213,7 +228,7 @@ CANON FACTS:
 ${canonContext}
 
 СОСТОЯНИЕ ИСТОРИИ НА НАЧАЛО ГЛАВЫ (персонажи и отношения, не противоречь):
-${storyState}${authorBlock}
+${storyState}${authorBlock}${narrative.promptBlock}
 
 ПРЕДЫДУЩАЯ ГЛАВА:
 ${previousChapterSummary}
@@ -233,6 +248,9 @@ ${JSON.stringify(scenes, null, 2)}
       ],
       text: { format: { type: "text" } },
     });
+    return { value: aiResponse, usage: aiResponse.usage };
+      }
+    );
 
     const rawDraft = response.output_text?.trim(); if (!rawDraft) {
       return NextResponse.json(
@@ -260,6 +278,12 @@ ${JSON.stringify(scenes, null, 2)}
       authorNotes,
     });
   } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return NextResponse.json(
+        { error: error.message, code: "BUDGET_EXCEEDED" },
+        { status: 429 }
+      );
+    }
     console.error("Writer error:", error);
     return NextResponse.json(
       { error: "Не удалось создать черновик главы." },
