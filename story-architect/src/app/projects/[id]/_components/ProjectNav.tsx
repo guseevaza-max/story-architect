@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
-import { activeGroup, activeItemKey, isNavHidden, navGroups, navTools } from "@/lib/ux/nav";
+import { activeGroup, activeItemKey, activeSection, isNavHidden, navGroups, navSections, navTools } from "@/lib/ux/nav";
 import type { ChapterLite } from "@/lib/ux/commands";
 import CommandPalette from "./CommandPalette";
 
@@ -34,6 +34,7 @@ export default function ProjectNav({ projectId, pending, chapters = [], children
   const groups = navGroups(projectId);
   const group = activeGroup(pathname, projectId);
   const itemKey = activeItemKey(pathname, projectId);
+  const section = activeSection(pathname, projectId);
   const tools = navTools(projectId);
 
   return (
@@ -68,13 +69,16 @@ export default function ProjectNav({ projectId, pending, chapters = [], children
                   <span>{g.label}</span>
                   {g.key === "decisions" && pending > 0 && <span className="sa-side-badge">{pending}</span>}
                 </Link>
-                {active && g.items.length > 1 && (
+                {active && navSections(projectId, g.key).length > 1 && (
                   <div className="sa-side-sub">
-                    {g.items.map((i) => (
-                      <Link key={i.key} href={i.href} title={i.hint} aria-current={i.key === itemKey ? "page" : undefined} className={`sa-side-link sa-side-item${i.key === itemKey ? " sa-side-current" : ""}`}>
-                        {i.label}
-                      </Link>
-                    ))}
+                    {navSections(projectId, g.key).map((s) => {
+                      const current = s.label === section?.label;
+                      return (
+                        <Link key={s.label} href={s.href} aria-current={current ? "page" : undefined} className={`sa-side-link sa-side-item${current ? " sa-side-current" : ""}`}>
+                          {s.label}
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -94,7 +98,18 @@ export default function ProjectNav({ projectId, pending, chapters = [], children
         </div>
       </nav>
 
-      <div className="sa-main">{children}</div>
+      <div className="sa-main">
+        {section && section.items.length > 1 && (
+          <nav aria-label={`Страницы раздела «${section.label}»`} className="sa-subtabs">
+            {section.items.map((i) => (
+              <Link key={i.key} href={i.href} title={i.hint} aria-current={i.key === itemKey ? "page" : undefined} className="sa-subtab">
+                {i.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+        {children}
+      </div>
 
       <CommandPalette projectId={projectId} chapters={chapters} open={paletteOpen} onClose={closePalette} onOpen={openPalette} />
     </div>

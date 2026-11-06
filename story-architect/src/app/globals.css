@@ -190,6 +190,13 @@ button[disabled] { opacity: 0.55; }
   .sa-side-backdrop { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(0, 0, 0, 0.5); }
 }
 
+/* вкладки страниц раздела */
+.sa-subtabs { display: flex; gap: 4px; overflow-x: auto; padding: 8px 24px 0; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 20; }
+.sa-subtab { padding: 9px 14px; color: var(--muted); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; font-size: 14.5px; }
+.sa-subtab:hover { color: var(--text); }
+.sa-subtab[aria-current="page"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+@media (max-width: 900px) { .sa-subtabs { top: 49px; padding-left: 12px; padding-right: 12px; } }
+
 /* рабочий стол-пульт */
 .sa-pulse { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 16px; align-items: stretch; }
 .sa-hero { border-left: 4px solid var(--accent); }

@@ -8,13 +8,13 @@ import { recommend, stageHref, type StageKey } from "./chapterWorkspace";
 
 export type NavGroupKey = "dashboard" | "books" | "universe" | "plot" | "decisions";
 
-export type NavItem = { key: string; label: string; href: string; hint: string };
+export type NavItem = { key: string; label: string; href: string; hint: string; section?: string };
 export type NavGroup = { key: NavGroupKey; label: string; href: string; items: NavItem[] };
 
 /** Разделы по направлениям (docs/ux/navigation-proposal.md §2). */
 export function navGroups(projectId: string): NavGroup[] {
   const p = `/projects/${projectId}`;
-  const item = (key: string, label: string, path: string, hint: string): NavItem => ({ key, label, href: `${p}${path}`, hint });
+  const item = (key: string, label: string, path: string, hint: string, section?: string): NavItem => ({ key, label, href: `${p}${path}`, hint, ...(section ? { section } : {}) });
   return [
     {
       key: "dashboard",
@@ -33,14 +33,14 @@ export function navGroups(projectId: string): NavGroup[] {
       label: "Вселенная",
       href: `${p}/story-bible`,
       items: [
-        item("story-bible", "Story Bible", "/story-bible", "Авторский текст о мире и его анализ"),
-        item("lore", "Материалы мира", "/lore", "Исходные заметки и извлечение фактов"),
-        item("references", "Референсы", "/references", "Литературные ориентиры автора"),
-        item("characters", "Персонажи", "/characters", "Утверждённые персонажи"),
-        item("world", "Мир", "/world", "Сущности и правила мира"),
-        item("relationships", "Отношения", "/relationships", "Связи между персонажами и их история"),
-        item("canon", "Canon", "/canon", "Утверждённые факты"),
-        item("memory", "Память", "/memory", "Сводки глав и память истории"),
+        item("story-bible", "Story Bible", "/story-bible", "Авторский текст о мире и его анализ", "Материалы"),
+        item("lore", "Материалы мира", "/lore", "Исходные заметки и извлечение фактов", "Материалы"),
+        item("references", "Референсы", "/references", "Литературные ориентиры автора", "Материалы"),
+        item("characters", "Персонажи", "/characters", "Утверждённые персонажи", "Сущности"),
+        item("world", "Мир", "/world", "Сущности и правила мира", "Сущности"),
+        item("relationships", "Отношения", "/relationships", "Связи между персонажами и их история", "Сущности"),
+        item("canon", "Canon", "/canon", "Утверждённые факты", "Canon и память"),
+        item("memory", "Память", "/memory", "Сводки глав и память истории", "Canon и память"),
       ],
     },
     {
@@ -48,9 +48,9 @@ export function navGroups(projectId: string): NavGroup[] {
       label: "Сюжет",
       href: `${p}/plot-map`,
       items: [
-        item("plot-map", "Сюжетная карта", "/plot-map", "Замысел книги, вехи, тайны"),
-        item("plot-lines", "Сюжетные линии", "/plot-lines", "Линии и их этапы"),
-        item("timeline", "Хронология", "/timeline", "События во времени"),
+        item("plot-map", "Сюжетная карта", "/plot-map", "Замысел книги, вехи, тайны", "Сюжет"),
+        item("plot-lines", "Сюжетные линии", "/plot-lines", "Линии и их этапы", "Сюжет"),
+        item("timeline", "Хронология", "/timeline", "События во времени", "Сюжет"),
       ],
     },
     {
@@ -98,6 +98,33 @@ export function activeItemKey(pathname: string, projectId: string): string | nul
     if (found) return found.key;
   }
   return null;
+}
+
+export type NavSection = { label: string; href: string; items: NavItem[] };
+
+/** Разделы направления: страницы с одинаковым section собраны вместе, порядок сохранён. */
+export function navSections(projectId: string, groupKey: NavGroupKey): NavSection[] {
+  const group = navGroups(projectId).find((g) => g.key === groupKey);
+  if (!group) return [];
+  const out: NavSection[] = [];
+  for (const i of group.items) {
+    const label = i.section ?? i.label;
+    const found = out.find((s) => s.label === label);
+    if (found) found.items.push(i);
+    else out.push({ label, href: i.href, items: [i] });
+  }
+  return out;
+}
+
+/**
+ * Раздел, к которому относится адрес: его страницы показываются вкладками над содержимым.
+ * null, если адрес вне навигации.
+ */
+export function activeSection(pathname: string, projectId: string): NavSection | null {
+  const group = activeGroup(pathname, projectId);
+  const key = activeItemKey(pathname, projectId);
+  if (!group || !key) return null;
+  return navSections(projectId, group).find((s) => s.items.some((i) => i.key === key)) ?? null;
 }
 
 /** Печать и экспорт: навигация и панель Соавтора не нужны. */
