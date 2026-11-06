@@ -65,7 +65,7 @@ export default async function CanonPage({
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 30 }}>
@@ -73,7 +73,7 @@ export default async function CanonPage({
       </div>
 
       <h1>📖 Canon</h1>
-      <p style={{ color: "#666", fontSize: 18 }}>
+      <p style={{ color: "var(--muted)", fontSize: 18 }}>
         Подтверждённые факты проекта {project.name}: {facts.length}
         {facts.length === 500 ? " (показаны первые 500)" : ""}
       </p>
@@ -86,12 +86,12 @@ export default async function CanonPage({
           name="q"
           defaultValue={query.q}
           placeholder="Поиск по тексту факта"
-          style={{ padding: 10, minWidth: 260, border: "1px solid #ccc", borderRadius: 8 }}
+          style={{ padding: 10, minWidth: 260, border: "1px solid var(--border)", borderRadius: 8 }}
         />
         <select
           name="source"
           defaultValue={query.source ?? ""}
-          style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+          style={{ padding: 10, border: "1px solid var(--border)", borderRadius: 8 }}
         >
           <option value="">Любой источник</option>
           {CANON_SOURCES.map((s) => (
@@ -114,7 +114,7 @@ export default async function CanonPage({
       </form>
 
       {facts.length === 0 ? (
-        <p style={{ color: "#666", marginTop: 30 }}>
+        <p style={{ color: "var(--muted)", marginTop: 30 }}>
           {query.q || query.source
             ? "По этому запросу ничего не найдено."
             : "Пока нет фактов, принятых в Canon."}
@@ -129,10 +129,10 @@ export default async function CanonPage({
               <article
                 key={fact.id}
                 style={{
-                  border: "1px solid #ddd",
+                  border: "1px solid var(--border)",
                   borderRadius: 12,
                   padding: 18,
-                  background: "#fff",
+                  background: "var(--surface)",
                 }}
               >
                 <p style={{ margin: 0, fontSize: 17 }}>
@@ -144,8 +144,8 @@ export default async function CanonPage({
                     style={{
                       margin: "12px 0 0",
                       paddingLeft: 12,
-                      borderLeft: "3px solid #ccc",
-                      color: "#555",
+                      borderLeft: "3px solid var(--border)",
+                      color: "var(--text-2)",
                       fontSize: 14,
                     }}
                   >
@@ -155,7 +155,7 @@ export default async function CanonPage({
                     </div>
                   </blockquote>
                 )}
-                <p style={{ margin: "12px 0 0", color: "#777", fontSize: 13 }}>
+                <p style={{ margin: "12px 0 0", color: "var(--muted)", fontSize: 13 }}>
                   {CANON_SOURCE_LABELS[fact.factSource]} ·{" "}
                   {fact.canonLevel === "HARD" ? "жёсткий закон" : "мягкая норма"} ·
                   важность {fact.importance}

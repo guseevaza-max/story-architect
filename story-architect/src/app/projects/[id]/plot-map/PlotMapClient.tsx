@@ -39,7 +39,7 @@ type Secret = {
 };
 type Book = Record<string, string | null> | null;
 
-const box: React.CSSProperties = { border: "1px solid #ccc", borderRadius: 12, padding: 16, background: "#fff", marginBottom: 12 };
+const box: React.CSSProperties = { border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--surface)", marginBottom: 12 };
 const input: React.CSSProperties = { width: "100%", padding: 6, boxSizing: "border-box", marginBottom: 8 };
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", marginRight: 6 };
 
@@ -164,7 +164,7 @@ export default function PlotMapClient({ projectId }: { projectId: string }) {
 
   return (
     <div>
-      {error && <p style={{ color: "#b00020" }}>{error}</p>}
+      {error && <p style={{ color: "var(--danger-text)" }}>{error}</p>}
 
       <section style={box}>
         <h2>Замысел книги</h2>
@@ -187,9 +187,9 @@ export default function PlotMapClient({ projectId }: { projectId: string }) {
 
       <section style={box}>
         <h2>Сюжетные вехи</h2>
-        {beats.length === 0 && <p style={{ color: "#555" }}>Вех пока нет. Начни с нескольких крупных.</p>}
+        {beats.length === 0 && <p style={{ color: "var(--text-2)" }}>Вех пока нет. Начни с нескольких крупных.</p>}
         {beats.map((b, i) => (
-          <div key={b.id} style={{ borderTop: "1px solid #eee", padding: "8px 0" }}>
+          <div key={b.id} style={{ borderTop: "1px solid var(--border-soft)", padding: "8px 0" }}>
             <strong>
               {i + 1}. {b.name}
             </strong>{" "}
@@ -214,7 +214,7 @@ export default function PlotMapClient({ projectId }: { projectId: string }) {
           </div>
         ))}
         {editBeat ? (
-          <div style={{ ...box, background: "#fafafa" }}>
+          <div style={{ ...box, background: "var(--surface-2)" }}>
             <input style={input} placeholder="Название" value={editBeat.name ?? ""} onChange={(e) => setEditBeat({ ...editBeat, name: e.target.value })} />
             <textarea style={input} rows={3} placeholder="Описание" value={editBeat.description ?? ""} onChange={(e) => setEditBeat({ ...editBeat, description: e.target.value })} />
             <input style={input} placeholder="Сюжетная функция" value={editBeat.narrativeFunction ?? ""} onChange={(e) => setEditBeat({ ...editBeat, narrativeFunction: e.target.value })} />
@@ -244,9 +244,9 @@ export default function PlotMapClient({ projectId }: { projectId: string }) {
 
       <section style={box}>
         <h2>Тайны и план раскрытия</h2>
-        {secrets.length === 0 && <p style={{ color: "#555" }}>Тайн пока нет.</p>}
+        {secrets.length === 0 && <p style={{ color: "var(--text-2)" }}>Тайн пока нет.</p>}
         {secrets.map((s) => (
-          <div key={s.id} style={{ borderTop: "1px solid #eee", padding: "8px 0" }}>
+          <div key={s.id} style={{ borderTop: "1px solid var(--border-soft)", padding: "8px 0" }}>
             <strong>{s.name}</strong>{" "}
             <small>
               намёки с гл. {s.hintFromChapter ?? "—"} · частично гл. {s.partialRevealChapter ?? "—"} · полностью гл. {s.plannedRevealChapter ?? "—"}
@@ -256,7 +256,7 @@ export default function PlotMapClient({ projectId }: { projectId: string }) {
           </div>
         ))}
         {editSecret ? (
-          <div style={{ ...box, background: "#fafafa" }}>
+          <div style={{ ...box, background: "var(--surface-2)" }}>
             <input style={input} placeholder="Название тайны" value={editSecret.name ?? ""} onChange={(e) => setEditSecret({ ...editSecret, name: e.target.value })} />
             <textarea style={input} rows={2} placeholder="Объективная истина мира" value={editSecret.objectiveTruth ?? ""} onChange={(e) => setEditSecret({ ...editSecret, objectiveTruth: e.target.value })} />
             <textarea style={input} rows={2} placeholder="Что категорически нельзя раскрывать раньше времени" value={editSecret.forbiddenEarly ?? ""} onChange={(e) => setEditSecret({ ...editSecret, forbiddenEarly: e.target.value })} />

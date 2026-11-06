@@ -24,7 +24,7 @@ const GROUPS: [keyof Preview["beats"], string][] = [
   ["unplaced", "Без номера главы"],
 ];
 
-const card: React.CSSProperties = { border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 10, background: "#fff" };
+const card: React.CSSProperties = { border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginBottom: 10, background: "var(--surface)" };
 
 export default function NarrativeContextPanel({ projectId, chapterId }: { projectId: string; chapterId: string }) {
   const [data, setData] = useState<Data | null>(null);
@@ -53,31 +53,31 @@ export default function NarrativeContextPanel({ projectId, chapterId }: { projec
   const groupTitle = (k: string) => GROUPS.find(([key]) => key === k)?.[1] ?? "";
 
   return (
-    <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+    <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
       <h2 style={{ marginTop: 0 }}>🧭 Долгосрочный контекст для Writer</h2>
-      <p style={{ color: "#555" }}>
+      <p style={{ color: "var(--text-2)" }}>
         Что Writer узнает из сюжетной карты. Предпросмотр содержит спойлеры, это не текст для публикации.
       </p>
       <button onClick={load} disabled={loading} style={{ padding: "6px 12px", cursor: "pointer" }}>
         {loading ? "Загрузка…" : data ? "Обновить" : "Показать контекст"}
       </button>
-      {error && <p style={{ color: "#b00020" }}>{error}</p>}
+      {error && <p style={{ color: "var(--danger-text)" }}>{error}</p>}
 
       {data && p && (
         <div style={{ marginTop: 16 }}>
           {p.warnings.length > 0 && (
-            <div style={{ ...card, background: "#fff7e6", borderColor: "#f0c36d" }}>
+            <div style={{ ...card, background: "var(--warn-bg)", borderColor: "var(--warn-border)" }}>
               <strong>⚠️ Предупреждения</strong>
               <ul>{p.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
             </div>
           )}
 
-          <div style={{ ...card, background: "#f3f3f3" }}>
+          <div style={{ ...card, background: "var(--surface-3)" }}>
             <strong>📚 Факты Canon</strong>: Writer получает их отдельно ({data.canonFactCount} шт. для главы {p.chapterNumber}). Ориентиры ниже Canon не отменяют.
           </div>
 
           {p.constraints && (
-            <div style={{ ...card, background: "#fdecea", borderColor: "#e8a5a0" }}>
+            <div style={{ ...card, background: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
               <strong>⛔ Авторские ограничения</strong>
               <p style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>{p.constraints}</p>
             </div>
@@ -91,25 +91,25 @@ export default function NarrativeContextPanel({ projectId, chapterId }: { projec
           )}
 
           {approved.length > 0 && (
-            <div style={{ ...card, background: "#eef7ee", borderColor: "#b7dbb7" }}>
+            <div style={{ ...card, background: "var(--ok-bg)", borderColor: "var(--ok-border)" }}>
               <strong>✅ Утверждённые ориентиры</strong>
               <ul>{approved.map((b) => <li key={b.id}><strong>{b.name}</strong> <small>({b.chapters ?? "без номера главы"}; {groupTitle(b.group)})</small>{b.details ? <div>{b.details}</div> : null}</li>)}</ul>
             </div>
           )}
 
           {preliminary.length > 0 && (
-            <div style={{ ...card, background: "#fffdf0", borderColor: "#e6d98c" }}>
+            <div style={{ ...card, background: "var(--warn-bg)", borderColor: "var(--warn-border)" }}>
               <strong>💡 Предварительные идеи</strong> <small>(не факты, на них нельзя строить необратимое)</small>
               <ul>{preliminary.map((b) => <li key={b.id}><strong>{b.name}</strong> <small>({b.approval === "APPROXIMATE" ? "примерно" : "черновая идея"}; {b.chapters ?? "без номера главы"}; {groupTitle(b.group)})</small>{b.details ? <div>{b.details}</div> : null}</li>)}</ul>
             </div>
           )}
 
           {GROUPS.some(([k]) => p.omitted[k] > 0) && (
-            <p style={{ color: "#555" }}>Часть вех не показана для экономии контекста: {GROUPS.filter(([k]) => p.omitted[k] > 0).map(([k, t]) => `${t} (+${p.omitted[k]})`).join(", ")}.</p>
+            <p style={{ color: "var(--text-2)" }}>Часть вех не показана для экономии контекста: {GROUPS.filter(([k]) => p.omitted[k] > 0).map(([k, t]) => `${t} (+${p.omitted[k]})`).join(", ")}.</p>
           )}
 
           {p.secrets.length > 0 && (
-            <div style={{ ...card, background: "#f3effb", borderColor: "#c9b7e8" }}>
+            <div style={{ ...card, background: "var(--violet-bg)", borderColor: "var(--violet-border)" }}>
               <strong>🔒 Тайны: допустимое раскрытие на главе {p.chapterNumber}</strong>
               <ul>
                 {p.secrets.map((s) => (
@@ -130,7 +130,7 @@ export default function NarrativeContextPanel({ projectId, chapterId }: { projec
               <button onClick={() => setShowText(!showText)} style={{ padding: "4px 10px", cursor: "pointer" }}>
                 {showText ? "Скрыть текст запроса" : "Показать точный текст для Writer"}
               </button>
-              {showText && <pre style={{ whiteSpace: "pre-wrap", background: "#f7f7f7", padding: 12, borderRadius: 8, marginTop: 8 }}>{data.promptBlock}</pre>}
+              {showText && <pre style={{ whiteSpace: "pre-wrap", background: "var(--surface-2)", padding: 12, borderRadius: 8, marginTop: 8 }}>{data.promptBlock}</pre>}
             </div>
           )}
         </div>

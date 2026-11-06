@@ -65,9 +65,9 @@ type Message = {
 };
 type View = "list" | "new" | "thread";
 
-const btn: React.CSSProperties = { padding: "6px 10px", border: "1px solid #ccc", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 13 };
-const primary: React.CSSProperties = { ...btn, border: "none", background: "#111", color: "#fff" };
-const field: React.CSSProperties = { width: "100%", padding: 8, boxSizing: "border-box", border: "1px solid #ccc", borderRadius: 8, fontSize: 14, fontFamily: "inherit" };
+const btn: React.CSSProperties = { padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", cursor: "pointer", fontSize: 13 };
+const primary: React.CSSProperties = { ...btn, border: "none", background: "var(--primary)", color: "var(--on-primary)" };
+const field: React.CSSProperties = { width: "100%", padding: 8, boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 8, fontSize: 14, fontFamily: "inherit" };
 
 export default function CoauthorDock({ projectId }: { projectId: string }) {
   const pathname = usePathname() ?? "";
@@ -334,7 +334,7 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
 
   const scopeOptions: Scope[] = pathChapterId || form.chapterId ? ["CHAPTER", "TOPIC", "PROJECT"] : ["TOPIC", "PROJECT"];
   const chapterForNew = form.chapterId ?? pathChapterId;
-  const budgetColor = budget?.level === "over" ? "#b00020" : budget?.level === "warn" ? "#a15c00" : "#555";
+  const budgetColor = budget?.level === "over" ? "var(--danger-text)" : budget?.level === "warn" ? "var(--warn-text)" : "var(--text-2)";
 
   return (
     <>
@@ -343,7 +343,7 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Открыть Соавтора"
-          style={{ position: "fixed", right: 20, bottom: 20, zIndex: 50, padding: "12px 18px", borderRadius: 999, border: "none", background: "#111", color: "#fff", cursor: "pointer", fontSize: 15, boxShadow: "0 4px 14px rgba(0,0,0,.25)" }}
+          className="theme-user" style={{ position: "fixed", right: 20, bottom: 20, zIndex: 50, padding: "12px 18px", borderRadius: 999, border: "none", background: "var(--primary)", color: "var(--on-primary)", cursor: "pointer", fontSize: 15, boxShadow: "0 4px 14px rgba(0,0,0,.25)" }}
         >
           💬 Соавтор
         </button>
@@ -352,9 +352,9 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
       {open && (
         <aside
           aria-label="Соавтор"
-          style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(440px, 100vw)", zIndex: 60, background: "#fff", borderLeft: "1px solid #ddd", boxShadow: "-4px 0 18px rgba(0,0,0,.12)", display: "flex", flexDirection: "column", fontFamily: "Arial, sans-serif" }}
+          className="theme-user" style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(440px, 100vw)", zIndex: 60, background: "var(--surface)", borderLeft: "1px solid var(--border)", boxShadow: "-4px 0 18px rgba(0,0,0,.12)", display: "flex", flexDirection: "column", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
         >
-          <header style={{ padding: "12px 14px", borderBottom: "1px solid #eee" }}>
+          <header style={{ padding: "12px 14px", borderBottom: "1px solid var(--border-soft)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {view !== "list" && (
                 <button type="button" style={btn} onClick={() => { setView("list"); setError(""); void loadThreads(archivedMode); }}>
@@ -367,18 +367,18 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
             {budget && (
               <div style={{ marginTop: 8, fontSize: 12, color: budgetColor }}>
                 {budget.text}
-                <div style={{ height: 4, background: "#eee", borderRadius: 2, marginTop: 4 }}>
-                  <div style={{ width: `${budget.percentUsed}%`, height: 4, borderRadius: 2, background: budget.level === "over" ? "#b00020" : budget.level === "warn" ? "#d98200" : "#4a8" }} />
+                <div style={{ height: 4, background: "var(--surface-3)", borderRadius: 2, marginTop: 4 }}>
+                  <div style={{ width: `${budget.percentUsed}%`, height: 4, borderRadius: 2, background: budget.level === "over" ? "var(--danger-solid)" : budget.level === "warn" ? "var(--warn-solid)" : "var(--ok-solid)" }} />
                 </div>
               </div>
             )}
-            <div style={{ marginTop: 6, fontSize: 11, color: "#777", lineHeight: 1.4 }}>
+            <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>
               Соавтор обсуждает и предлагает. Ничего не записывается в Canon, Story Bible, сюжетную карту и главы без вашего решения.
             </div>
           </header>
 
           {error && (
-            <div role="alert" style={{ margin: "10px 14px 0", padding: 10, borderRadius: 8, background: "#fdecec", color: "#8a1c1c", fontSize: 13, lineHeight: 1.45 }}>
+            <div role="alert" style={{ margin: "10px 14px 0", padding: 10, borderRadius: 8, background: "var(--danger-bg)", color: "var(--danger-text)", fontSize: 13, lineHeight: 1.45 }}>
               {error}
             </div>
           )}
@@ -394,15 +394,15 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                     {archivedMode ? "Показать активные" : "Архив"}
                   </button>
                 </div>
-                {threads.length === 0 && <p style={{ color: "#666", fontSize: 14 }}>{archivedMode ? "В архиве пусто." : "Бесед пока нет. Начните новую."}</p>}
+                {threads.length === 0 && <p style={{ color: "var(--muted)", fontSize: 14 }}>{archivedMode ? "В архиве пусто." : "Бесед пока нет. Начните новую."}</p>}
                 {threads.map((t) => (
-                  <div key={t.id} style={{ border: "1px solid #e3e3e3", borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                  <div key={t.id} style={{ border: "1px solid var(--border-soft)", borderRadius: 10, padding: 10, marginBottom: 8 }}>
                     {renaming === t.id ? (
                       <RenameRow initial={t.title} onSave={(title) => patchThread(t.id, { title })} onCancel={() => setRenaming(null)} />
                     ) : (
                       <button type="button" onClick={() => openThread(t.id)} style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{t.title}</div>
-                        <div style={{ fontSize: 12, color: "#777" }}>
+                        <div style={{ fontSize: 12, color: "var(--muted)" }}>
                           {t.mode === "CRITIC" ? "Критик · " : ""}{SCOPE_LABEL[t.scope]} · {TIER_LABEL[t.defaultTier]} · {new Date(t.updatedAt).toLocaleString("ru-RU")}
                         </div>
                       </button>
@@ -410,7 +410,7 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                       <button type="button" style={btn} onClick={() => setRenaming(t.id)}>Переименовать</button>
                       <button type="button" style={btn} onClick={() => patchThread(t.id, { archived: !t.archivedAt })}>{t.archivedAt ? "Вернуть" : "В архив"}</button>
-                      <button type="button" style={{ ...btn, color: "#b00020" }} onClick={() => removeThread(t)}>Удалить</button>
+                      <button type="button" style={{ ...btn, color: "var(--danger-text)" }} onClick={() => removeThread(t)}>Удалить</button>
                     </div>
                   </div>
                 ))}
@@ -434,7 +434,7 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                   <option value="CRITIC">Сценарный критик (строгий разбор главы)</option>
                 </select>
                 {form.mode === "CRITIC" && (
-                  <div style={{ fontSize: 12, color: chapterForNew ? "#777" : "#b00020", marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: chapterForNew ? "var(--muted)" : "var(--danger-text)", marginBottom: 8 }}>
                     {chapterForNew
                       ? "Критик прочитает главу целиком и вернёт отчёт с проблемами и рекомендациями. Это дороже обычного сообщения."
                       : "Откройте страницу главы, чтобы создать беседу критика."}
@@ -459,7 +459,7 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                   <option value="LUNA">Luna (экономная)</option>
                   <option value="TERRA">Terra (дороже)</option>
                 </select>
-                <div style={{ fontSize: 12, color: "#777", marginBottom: 12 }}>{TERRA_HINT} Для отдельного сообщения можно выбрать Terra и при Luna по умолчанию.</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>{TERRA_HINT} Для отдельного сообщения можно выбрать Terra и при Luna по умолчанию.</div>
                 {fragment && <FragmentChip fragment={fragment} onRemove={() => setFragment(null)} />}
                 <button type="button" style={primary} onClick={createThread} disabled={(form.scope === "CHAPTER" || form.mode === "CRITIC") && !chapterForNew}>
                   Создать беседу
@@ -476,7 +476,7 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                     <>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700 }}>{current.title}</div>
-                        <div style={{ fontSize: 12, color: "#777" }}>{MODE_LABEL[current.mode]} · {SCOPE_LABEL[current.scope]} · по умолчанию {TIER_LABEL[current.defaultTier]}</div>
+                        <div style={{ fontSize: 12, color: "var(--muted)" }}>{MODE_LABEL[current.mode]} · {SCOPE_LABEL[current.scope]} · по умолчанию {TIER_LABEL[current.defaultTier]}</div>
                       </div>
                       <button type="button" style={btn} onClick={() => setRenaming(current.id)}>✎</button>
                       <button type="button" style={btn} onClick={() => patchThread(current.id, { archived: !current.archivedAt })}>{current.archivedAt ? "Вернуть" : "В архив"}</button>
@@ -484,11 +484,11 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                   )}
                 </div>
                 {current.summary && (
-                  <div style={{ border: "1px solid #e3e3e3", borderRadius: 8, padding: 8, marginBottom: 10, fontSize: 12, background: "#fafafa" }}>
+                  <div style={{ border: "1px solid var(--border-soft)", borderRadius: 8, padding: 8, marginBottom: 10, fontSize: 12, background: "var(--surface-2)" }}>
                     <button type="button" style={{ ...btn, fontSize: 12 }} onClick={() => setShowSummary((v) => !v)}>
                       {showSummary ? "Скрыть" : "Показать"} краткое содержание ранней части беседы
                     </button>
-                    {showSummary && <div style={{ whiteSpace: "pre-wrap", marginTop: 8, lineHeight: 1.5 }}>{current.summary}<div style={{ color: "#888", marginTop: 6 }}>Это пересказ обсуждения, а не Canon.</div></div>}
+                    {showSummary && <div style={{ whiteSpace: "pre-wrap", marginTop: 8, lineHeight: 1.5 }}>{current.summary}<div style={{ color: "var(--muted)", marginTop: 6 }}>Это пересказ обсуждения, а не Canon.</div></div>}
                   </div>
                 )}
                 {current.mode !== "CRITIC" &&
@@ -498,35 +498,35 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                     !!current.summary,
                     current.summaryUpToAt ? messages.filter((m) => new Date(m.createdAt) > new Date(current.summaryUpToAt as string)).length : messages.length
                   ) && (
-                    <div style={{ marginBottom: 10, fontSize: 12, color: "#555" }}>
+                    <div style={{ marginBottom: 10, fontSize: 12, color: "var(--text-2)" }}>
                       Беседа стала длинной: старые сообщения не попадают в запрос к модели целиком.{" "}
                       <button type="button" style={btn} disabled={summarizing} onClick={summarize}>
                         {summarizing ? "Сжимаю…" : "Сжать раннюю часть"}
                       </button>
                     </div>
                   )}
-                {messages.length === 0 && <p style={{ color: "#666", fontSize: 14 }}>Задайте первый вопрос. Можно прикрепить выделенный фрагмент главы из редактора.</p>}
+                {messages.length === 0 && <p style={{ color: "var(--muted)", fontSize: 14 }}>Задайте первый вопрос. Можно прикрепить выделенный фрагмент главы из редактора.</p>}
                 {messages.map((m) => (
                   <MessageBubble key={m.id} m={m} revealed={!!revealed[m.id]} onReveal={() => setRevealed((r) => ({ ...r, [m.id]: !r[m.id] }))} />
                 ))}
                 {sending && streamText && (
                   <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 10 }}>
-                    <div style={{ maxWidth: "92%", padding: 10, borderRadius: 12, background: "#fff", border: "1px dashed #bbb", fontSize: 14, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                    <div style={{ maxWidth: "92%", padding: 10, borderRadius: 12, background: "var(--surface)", border: "1px dashed var(--border)", fontSize: 14, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                       {streamText}
-                      <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>идёт ответ ({TIER_LABEL[sending]}), ещё не сохранён…</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>идёт ответ ({TIER_LABEL[sending]}), ещё не сохранён…</div>
                     </div>
                   </div>
                 )}
-                {sending && !streamText && <div style={{ color: "#666", fontSize: 13, padding: "6px 0" }}>{current.mode === "CRITIC" ? "Критик читает главу" : "Соавтор думает"} ({TIER_LABEL[sending]})…</div>}
+                {sending && !streamText && <div style={{ color: "var(--muted)", fontSize: 13, padding: "6px 0" }}>{current.mode === "CRITIC" ? "Критик читает главу" : "Соавтор думает"} ({TIER_LABEL[sending]})…</div>}
                 <div ref={endRef} />
               </div>
             )}
           </div>
 
           {view === "thread" && current && (
-            <footer style={{ borderTop: "1px solid #eee", padding: 12 }}>
+            <footer style={{ borderTop: "1px solid var(--border-soft)", padding: 12 }}>
               {current.archivedAt ? (
-                <div style={{ fontSize: 13, color: "#666" }}>Беседа в архиве. Верните её, чтобы продолжить.</div>
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Беседа в архиве. Верните её, чтобы продолжить.</div>
               ) : (
                 <>
                   {fragment && <FragmentChip fragment={fragment} onRemove={() => setFragment(null)} />}
@@ -568,12 +568,12 @@ export default function CoauthorDock({ projectId }: { projectId: string }) {
                       </>
                     )}
                     {sending && abortRef.current && (
-                      <button type="button" style={{ ...btn, color: "#b00020" }} onClick={stopStreaming}>
+                      <button type="button" style={{ ...btn, color: "var(--danger-text)" }} onClick={stopStreaming}>
                         ■ Стоп
                       </button>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
                     {budget ? `${budget.text}. ` : ""}Terra примерно в десять раз дороже Luna.{current.mode === "CRITIC" ? " Разбор читает главу целиком и стоит дороже обычного сообщения." : ""}
                   </div>
                 </>
@@ -599,7 +599,7 @@ function RenameRow({ initial, onSave, onCancel }: { initial: string; onSave: (ti
 
 function FragmentChip({ fragment, onRemove }: { fragment: FragmentPayload; onRemove: () => void }) {
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: 8, marginBottom: 8, borderRadius: 8, background: "#f4f7fb", border: "1px solid #c9d8ea", fontSize: 12 }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: 8, marginBottom: 8, borderRadius: 8, background: "var(--info-bg)", border: "1px solid var(--info-border)", fontSize: 12 }}>
       <div style={{ flex: 1 }}>
         <strong>Фрагмент главы</strong> ({fragment.text.length} зн.): «{fragment.text.length > 160 ? `${fragment.text.slice(0, 160)}…` : fragment.text}»
       </div>
@@ -615,15 +615,15 @@ function MessageBubble({ m, revealed, onReveal }: { m: Message; revealed: boolea
   const cost = !mine ? costText(m.cost) : "";
   return (
     <div style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 10 }}>
-      <div style={{ maxWidth: "92%", padding: 10, borderRadius: 12, background: mine ? "#eef2f7" : "#fff", border: "1px solid #e3e3e3", fontSize: 14, lineHeight: 1.55 }}>
+      <div style={{ maxWidth: "92%", padding: 10, borderRadius: 12, background: mine ? "var(--info-bg)" : "var(--surface)", border: "1px solid var(--border-soft)", fontSize: 14, lineHeight: 1.55 }}>
         {mine && m.fragmentText && (
-          <div style={{ fontSize: 12, color: "#555", borderLeft: "3px solid #9bb7d4", paddingLeft: 8, marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: "var(--text-2)", borderLeft: "3px solid var(--info-border)", paddingLeft: 8, marginBottom: 6 }}>
             Фрагмент: «{m.fragmentText.length > 200 ? `${m.fragmentText.slice(0, 200)}…` : m.fragmentText}»
           </div>
         )}
         {report ? (
           m.containsSpoiler && !revealed ? (
-            <div style={{ padding: 8, margin: "4px 0", borderRadius: 8, background: "#fff6e0", border: "1px dashed #d9a400", fontSize: 13 }}>
+            <div style={{ padding: 8, margin: "4px 0", borderRadius: 8, background: "var(--warn-bg)", border: "1px dashed var(--warn-border)", fontSize: 13 }}>
               ⚠ Спойлер: отчёт затрагивает тайны сюжета.{" "}
               <button type="button" style={btn} onClick={onReveal}>Показать</button>
             </div>
@@ -633,19 +633,19 @@ function MessageBubble({ m, revealed, onReveal }: { m: Message; revealed: boolea
         ) : null}
         {report ? null : segments.map((s, i) =>
           s.spoiler && !revealed ? (
-            <div key={i} style={{ padding: 8, margin: "4px 0", borderRadius: 8, background: "#fff6e0", border: "1px dashed #d9a400", fontSize: 13 }}>
+            <div key={i} style={{ padding: 8, margin: "4px 0", borderRadius: 8, background: "var(--warn-bg)", border: "1px dashed var(--warn-border)", fontSize: 13 }}>
               ⚠ Спойлер: ответ затрагивает тайны сюжета.{" "}
               <button type="button" style={btn} onClick={onReveal}>Показать</button>
             </div>
           ) : (
-            <div key={i} style={{ whiteSpace: "pre-wrap", ...(s.spoiler ? { background: "#fff6e0", padding: 6, borderRadius: 6 } : {}) }}>
+            <div key={i} style={{ whiteSpace: "pre-wrap", ...(s.spoiler ? { background: "var(--warn-bg)", padding: 6, borderRadius: 6 } : {}) }}>
               {s.text}
               {s.spoiler && <div><button type="button" style={{ ...btn, marginTop: 4 }} onClick={onReveal}>Скрыть спойлер</button></div>}
             </div>
           )
         )}
         {!mine && (
-          <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
             {m.model === "mock" ? "заглушка AI_MOCK, без расходов" : [m.tier ? TIER_LABEL[m.tier] : null, cost].filter(Boolean).join(" · ")}
             {m.cost?.status === "UNKNOWN" && m.cost.assumedUsd ? ` (в лимит учтено ${formatUsd(m.cost.assumedUsd)})` : ""}
           </div>
@@ -662,7 +662,7 @@ function ReportCard({ report }: { report: ReportView }) {
       <div style={{ fontWeight: 700, marginBottom: 6 }}>Вердикт</div>
       <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>{report.verdict}</div>
       {report.problems.length === 0 ? (
-        <div style={{ fontSize: 13, color: "#2a6" }}>Существенных проблем не найдено.</div>
+        <div style={{ fontSize: 13, color: "var(--ok-text)" }}>Существенных проблем не найдено.</div>
       ) : (
         <div style={{ fontWeight: 700, marginBottom: 6 }}>Проблемы ({report.problems.length})</div>
       )}
@@ -674,8 +674,8 @@ function ReportCard({ report }: { report: ReportView }) {
               {i + 1}. {SEVERITY_LABEL[p.severity]} · {CATEGORY_LABEL[p.category as keyof typeof CATEGORY_LABEL] ?? p.category}
             </div>
             <div style={{ whiteSpace: "pre-wrap", marginTop: 4 }}>{clean(p.problem)}</div>
-            <div style={{ color: "#555", marginTop: 4 }}><strong>Основание:</strong> {p.evidence}</div>
-            <div style={{ color: "#555", marginTop: 4 }}><strong>Почему важно:</strong> {p.whyItMatters}</div>
+            <div style={{ color: "var(--text-2)", marginTop: 4 }}><strong>Основание:</strong> {p.evidence}</div>
+            <div style={{ color: "var(--text-2)", marginTop: 4 }}><strong>Почему важно:</strong> {p.whyItMatters}</div>
             <div style={{ marginTop: 4 }}>
               <strong>Что сделать:</strong>
               <ul style={{ margin: "2px 0 0 18px", padding: 0 }}>{p.recommendations.map((r, j) => <li key={j}>{r}</li>)}</ul>
@@ -695,7 +695,7 @@ function ReportCard({ report }: { report: ReportView }) {
           <ul style={{ margin: "2px 0 0 18px", padding: 0 }}>{report.questionsForAuthor.map((t, i) => <li key={i}>{t}</li>)}</ul>
         </div>
       )}
-      <div style={{ fontSize: 11, color: "#888", marginTop: 8 }}>Это мнение критика, а не решение. Canon не изменён.</div>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>Это мнение критика, а не решение. Canon не изменён.</div>
     </div>
   );
 }

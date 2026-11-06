@@ -140,6 +140,7 @@ describe("реестр ИИ-маршрутов", () => {
     "src/app/api/ai/analyze/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/architect/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/continuity/apply-suggestions/route.ts": true,
+    "src/app/api/projects/[id]/chapters/[chapterId]/continuity/plan/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/continuity/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/continuity/suggestions/route.ts": true,
     "src/app/api/projects/[id]/chapters/[chapterId]/memory/route.ts": true,

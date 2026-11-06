@@ -71,8 +71,8 @@ export default function CreateChapterForm({
           padding: "12px 18px",
           border: "none",
           borderRadius: 10,
-          background: "#111",
-          color: "#fff",
+          background: "var(--primary)",
+          color: "var(--on-primary)",
           fontSize: 15,
           fontWeight: 600,
           cursor: "pointer",
@@ -88,9 +88,9 @@ export default function CreateChapterForm({
       style={{
         marginTop: 18,
         padding: 20,
-        border: "1px solid #ddd",
+        border: "1px solid var(--border)",
         borderRadius: 12,
-        background: "#fff",
+        background: "var(--surface)",
       }}
     >
       <form onSubmit={handleSubmit}>
@@ -115,7 +115,7 @@ export default function CreateChapterForm({
               width: "100%",
               boxSizing: "border-box",
               padding: "11px 12px",
-              border: "1px solid #ccc",
+              border: "1px solid var(--border)",
               borderRadius: 8,
               fontSize: 15,
             }}
@@ -142,7 +142,7 @@ export default function CreateChapterForm({
               width: "100%",
               boxSizing: "border-box",
               padding: "11px 12px",
-              border: "1px solid #ccc",
+              border: "1px solid var(--border)",
               borderRadius: 8,
               fontSize: 15,
               resize: "vertical",
@@ -170,7 +170,7 @@ export default function CreateChapterForm({
               width: "100%",
               boxSizing: "border-box",
               padding: "11px 12px",
-              border: "1px solid #ccc",
+              border: "1px solid var(--border)",
               borderRadius: 8,
               fontSize: 15,
               resize: "vertical",
@@ -184,8 +184,8 @@ export default function CreateChapterForm({
               marginBottom: 16,
               padding: 10,
               borderRadius: 8,
-              background: "#fee2e2",
-              color: "#991b1b",
+              background: "var(--danger-bg)",
+              color: "var(--danger-text)",
               fontSize: 14,
             }}
           >
@@ -206,8 +206,8 @@ export default function CreateChapterForm({
               padding: "10px 16px",
               border: "none",
               borderRadius: 8,
-              background: "#111",
-              color: "#fff",
+              background: "var(--primary)",
+              color: "var(--on-primary)",
               cursor: loading ? "default" : "pointer",
               opacity: loading ? 0.6 : 1,
             }}
@@ -223,9 +223,9 @@ export default function CreateChapterForm({
             }}
             style={{
               padding: "10px 16px",
-              border: "1px solid #ccc",
+              border: "1px solid var(--border)",
               borderRadius: 8,
-              background: "#fff",
+              background: "var(--surface)",
               cursor: "pointer",
             }}
           >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 
 export default function ApproveChapterButton({
@@ -11,6 +12,7 @@ export default function ApproveChapterButton({
   chapterId: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
 
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +53,7 @@ export default function ApproveChapterButton({
         return;
       }
 
+      toast.success("Глава утверждена");
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -74,9 +77,9 @@ export default function ApproveChapterButton({
           borderRadius: 8,
           border: "none",
           background: approving
-            ? "#777"
-            : "#287a35",
-          color: "#fff",
+            ? "var(--surface-3)"
+            : "var(--ok-solid)",
+          color: "var(--on-primary)",
           cursor: approving
             ? "default"
             : "pointer",
@@ -93,7 +96,7 @@ export default function ApproveChapterButton({
         <div
           style={{
             marginTop: 10,
-            color: "#991b1b",
+            color: "var(--danger-text)",
             fontSize: 14,
           }}
         >

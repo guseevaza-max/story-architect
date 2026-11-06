@@ -65,9 +65,9 @@ export default function WriterButton({
           borderRadius: 8,
           border: "none",
           background: loading
-            ? "#777"
-            : "#111",
-          color: "#fff",
+            ? "var(--surface-3)"
+            : "var(--primary)",
+          color: "var(--on-primary)",
           cursor: loading
             ? "default"
             : "pointer",
@@ -86,8 +86,8 @@ export default function WriterButton({
             marginTop: 12,
             padding: 12,
             borderRadius: 8,
-            background: "#fff4e0",
-            color: "#6b4600",
+            background: "var(--warn-bg)",
+            color: "var(--warn-text)",
             lineHeight: 1.5,
           }}
         >
@@ -102,8 +102,8 @@ export default function WriterButton({
             marginTop: 12,
             padding: 12,
             borderRadius: 8,
-            background: "#fee2e2",
-            color: "#991b1b",
+            background: "var(--danger-bg)",
+            color: "var(--danger-text)",
             lineHeight: 1.5,
           }}
         >

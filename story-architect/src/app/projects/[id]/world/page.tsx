@@ -59,7 +59,7 @@ export default async function WorldPage({
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 30 }}>
@@ -70,7 +70,7 @@ export default async function WorldPage({
 
       <h1>🌍 World</h1>
 
-      <p style={{ color: "#666", fontSize: 18 }}>
+      <p style={{ color: "var(--muted)", fontSize: 18 }}>
         Мир проекта {project.name}
       </p>
 
@@ -78,14 +78,14 @@ export default async function WorldPage({
         style={{
           marginTop: 30,
           padding: 24,
-          border: "1px solid #ddd",
+          border: "1px solid var(--border)",
           borderRadius: 12,
         }}
       >
         <h2>Мир и сущности</h2>
 
         {worldEntities.length === 0 ? (
-          <p style={{ color: "#666" }}>
+          <p style={{ color: "var(--muted)" }}>
             Пока нет элементов мира, принятых в Canon.
           </p>
         ) : (
@@ -102,10 +102,10 @@ export default async function WorldPage({
               <article
                 key={entity.id}
                 style={{
-                  border: "1px solid #ddd",
+                  border: "1px solid var(--border)",
                   borderRadius: 12,
                   padding: 20,
-                  background: "#fff",
+                  background: "var(--surface)",
                 }}
               >
                 <div
@@ -123,8 +123,8 @@ export default async function WorldPage({
                     style={{
                       padding: "4px 8px",
                       borderRadius: 20,
-                      background: "#e8f5e9",
-                      color: "#26733a",
+                      background: "var(--ok-bg)",
+                      color: "var(--ok-text)",
                       fontSize: 11,
                       fontWeight: 700,
                     }}
@@ -137,7 +137,7 @@ export default async function WorldPage({
                   <p
                     style={{
                       marginTop: 10,
-                      color: "#666",
+                      color: "var(--muted)",
                     }}
                   >
                     <strong>Тип:</strong> {entity.type}
@@ -147,7 +147,7 @@ export default async function WorldPage({
                 {entity.description && (
                   <p
                     style={{
-                      color: "#555",
+                      color: "var(--text-2)",
                       lineHeight: 1.6,
                     }}
                   >
@@ -164,14 +164,14 @@ export default async function WorldPage({
         style={{
           marginTop: 30,
           padding: 24,
-          border: "1px solid #ddd",
+          border: "1px solid var(--border)",
           borderRadius: 12,
         }}
       >
         <h2>⚙️ Правила мира</h2>
 
         {worldRules.length === 0 ? (
-          <p style={{ color: "#666" }}>
+          <p style={{ color: "var(--muted)" }}>
             Пока нет правил мира, принятых в Canon.
           </p>
         ) : (
@@ -186,10 +186,10 @@ export default async function WorldPage({
               <article
                 key={rule.id}
                 style={{
-                  border: "1px solid #ddd",
+                  border: "1px solid var(--border)",
                   borderRadius: 12,
                   padding: 20,
-                  background: "#fff",
+                  background: "var(--surface)",
                 }}
               >
                 <h3 style={{ marginTop: 0 }}>
@@ -204,7 +204,7 @@ export default async function WorldPage({
                 {rule.explanation && (
                   <p
                     style={{
-                      color: "#555",
+                      color: "var(--text-2)",
                       lineHeight: 1.6,
                     }}
                   >

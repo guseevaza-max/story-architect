@@ -726,10 +726,10 @@ export default function MemoryUpdateButton({
 
           background:
             loading
-              ? "#777"
-              : "#2563eb",
+              ? "var(--surface-3)"
+              : "var(--info-solid)",
 
-          color: "#fff",
+          color: "var(--on-primary)",
 
           cursor:
             loading
@@ -757,9 +757,9 @@ export default function MemoryUpdateButton({
             padding: 12,
             borderRadius: 8,
             background:
-              "#fff1f2",
+              "var(--danger-bg)",
             color:
-              "#991b1b",
+              "var(--danger-text)",
             fontSize: 14,
           }}
         >
@@ -778,9 +778,9 @@ export default function MemoryUpdateButton({
             padding: 12,
             borderRadius: 8,
             background:
-              "#ecfdf5",
+              "var(--ok-bg)",
             color:
-              "#166534",
+              "var(--ok-text)",
             fontSize: 14,
           }}
         >
@@ -799,10 +799,10 @@ export default function MemoryUpdateButton({
               marginTop: 16,
               padding: 16,
               border:
-                "1px solid #cbd5e1",
+                "1px solid var(--info-border)",
               borderRadius: 10,
               background:
-                "#f8fafc",
+                "var(--info-bg)",
             }}
           >
             <h3
@@ -879,9 +879,9 @@ export default function MemoryUpdateButton({
                   padding: 12,
                   borderRadius: 8,
                   background:
-                    "#eff6ff",
+                    "var(--info-bg)",
                   color:
-                    "#1e3a8a",
+                    "var(--info-text)",
                 }}
               >
                 👤 Найдено новых
@@ -907,10 +907,10 @@ export default function MemoryUpdateButton({
             marginTop: 16,
             padding: 18,
             border:
-              "2px solid #d9c58b",
+              "2px solid var(--warn-border)",
             borderRadius: 10,
             background:
-              "#fffdf5",
+              "var(--warn-bg)",
           }}
         >
           {/* HEADER */}
@@ -945,11 +945,11 @@ export default function MemoryUpdateButton({
                 background:
                   proposal.safety ===
                   "CONFLICT"
-                    ? "#fee2e2"
+                    ? "var(--danger-bg)"
                     : proposal.safety ===
                       "UNCERTAIN"
-                    ? "#fef3c7"
-                    : "#dcfce7",
+                    ? "var(--on-primary)"
+                    : "var(--ok-bg)",
                 fontSize:
                   12,
                 fontWeight:
@@ -963,7 +963,7 @@ export default function MemoryUpdateButton({
           <p
             style={{
               color:
-                "#666",
+                "var(--muted)",
               lineHeight:
                 1.5,
             }}
@@ -991,10 +991,10 @@ export default function MemoryUpdateButton({
                   18,
                 padding: 16,
                 border:
-                  "2px solid #93c5fd",
+                  "2px solid var(--info-border)",
                 borderRadius: 10,
                 background:
-                  "#eff6ff",
+                  "var(--info-bg)",
               }}
             >
               <h3
@@ -1003,7 +1003,7 @@ export default function MemoryUpdateButton({
                   marginBottom:
                     8,
                   color:
-                    "#1e3a8a",
+                    "var(--info-text)",
                 }}
               >
                 👤 Новые персонажи
@@ -1016,7 +1016,7 @@ export default function MemoryUpdateButton({
                   marginBottom:
                     14,
                   color:
-                    "#475569",
+                    "var(--text-2)",
                   lineHeight:
                     1.5,
                 }}
@@ -1047,11 +1047,11 @@ export default function MemoryUpdateButton({
                         padding:
                           14,
                         border:
-                          "1px solid #bfdbfe",
+                          "1px solid var(--info-border)",
                         borderRadius:
                           9,
                         background:
-                          "#fff",
+                          "var(--surface)",
                       }}
                     >
                       <div
@@ -1088,9 +1088,9 @@ export default function MemoryUpdateButton({
                               borderRadius:
                                 999,
                               background:
-                                "#e0e7ff",
+                                "var(--info-bg)",
                               color:
-                                "#3730a3",
+                                "var(--info-text)",
                             }}
                           >
                             {
@@ -1110,11 +1110,11 @@ export default function MemoryUpdateButton({
                             background:
                               character.safety ===
                               "SAFE"
-                                ? "#dcfce7"
+                                ? "var(--ok-bg)"
                                 : character.safety ===
                                   "UNCERTAIN"
-                                ? "#fef3c7"
-                                : "#fee2e2",
+                                ? "var(--on-primary)"
+                                : "var(--danger-bg)",
                           }}
                         >
                           {
@@ -1127,7 +1127,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               11,
                             color:
-                              "#777",
+                              "var(--muted)",
                           }}
                         >
                           confidence{" "}
@@ -1147,7 +1147,7 @@ export default function MemoryUpdateButton({
                         <div
                           style={{
                             color:
-                              "#444",
+                              "var(--text-2)",
                             lineHeight:
                               1.5,
                           }}
@@ -1166,7 +1166,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1186,7 +1186,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1206,7 +1206,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1226,7 +1226,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1246,7 +1246,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1266,7 +1266,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1286,7 +1286,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1310,7 +1310,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               13,
                             color:
-                              "#555",
+                              "var(--text-2)",
                           }}
                         >
                           <strong>
@@ -1330,7 +1330,7 @@ export default function MemoryUpdateButton({
                             fontSize:
                               12,
                             color:
-                              "#777",
+                              "var(--muted)",
                           }}
                         >
                           Почему:{" "}
@@ -1348,11 +1348,11 @@ export default function MemoryUpdateButton({
                           borderRadius:
                             7,
                           background:
-                            "#f8fafc",
+                            "var(--info-bg)",
                           fontSize:
                             12,
                           color:
-                            "#64748b",
+                            "var(--muted)",
                         }}
                       >
                         ⏳ Персонаж пока
@@ -1396,17 +1396,17 @@ export default function MemoryUpdateButton({
                 borderRadius:
                   7,
                 border:
-                  "1px solid #ccc",
+                  "1px solid var(--border)",
                 background:
                   updates.length ===
                   0
-                    ? "#f1f1f1"
-                    : "#fff",
+                    ? "var(--surface-3)"
+                    : "var(--surface)",
                 color:
                   updates.length ===
                   0
-                    ? "#999"
-                    : "#222",
+                    ? "var(--faint)"
+                    : "var(--text)",
                 cursor:
                   updates.length ===
                   0
@@ -1433,17 +1433,17 @@ export default function MemoryUpdateButton({
                 borderRadius:
                   7,
                 border:
-                  "1px solid #ccc",
+                  "1px solid var(--border)",
                 background:
                   updates.length ===
                   0
-                    ? "#f1f1f1"
-                    : "#fff",
+                    ? "var(--surface-3)"
+                    : "var(--surface)",
                 color:
                   updates.length ===
                   0
-                    ? "#999"
-                    : "#222",
+                    ? "var(--faint)"
+                    : "var(--text)",
                 cursor:
                   updates.length ===
                   0
@@ -1471,13 +1471,13 @@ export default function MemoryUpdateButton({
                   padding:
                     14,
                   border:
-                    "1px solid #ddd",
+                    "1px solid var(--border)",
                   borderRadius:
                     9,
                   background:
-                    "#fff",
+                    "var(--surface)",
                   color:
-                    "#666",
+                    "var(--muted)",
                 }}
               >
                 В Memory нет
@@ -1505,14 +1505,14 @@ export default function MemoryUpdateButton({
                           14,
                         border:
                           checked
-                            ? "2px solid #86b99a"
-                            : "1px solid #ddd",
+                            ? "2px solid var(--ok-border)"
+                            : "1px solid var(--border)",
                         borderRadius:
                           9,
                         background:
                           checked
-                            ? "#f7fff8"
-                            : "#fff",
+                            ? "var(--ok-bg)"
+                            : "var(--surface)",
                         cursor:
                           "pointer",
                       }}
@@ -1577,11 +1577,11 @@ export default function MemoryUpdateButton({
                                 background:
                                   item.safety ===
                                   "SAFE"
-                                    ? "#dcfce7"
+                                    ? "var(--ok-bg)"
                                     : item.safety ===
                                       "UNCERTAIN"
-                                    ? "#fef3c7"
-                                    : "#fee2e2",
+                                    ? "var(--on-primary)"
+                                    : "var(--danger-bg)",
                               }}
                             >
                               {
@@ -1594,7 +1594,7 @@ export default function MemoryUpdateButton({
                                 fontSize:
                                   11,
                                 color:
-                                  "#777",
+                                  "var(--muted)",
                               }}
                             >
                               confidence{" "}
@@ -1613,7 +1613,7 @@ export default function MemoryUpdateButton({
                           <div
                             style={{
                               color:
-                                "#444",
+                                "var(--text-2)",
                               lineHeight:
                                 1.5,
                             }}
@@ -1630,7 +1630,7 @@ export default function MemoryUpdateButton({
                               fontSize:
                                 12,
                               color:
-                                "#777",
+                                "var(--muted)",
                             }}
                           >
                             Почему:{" "}
@@ -1658,7 +1658,7 @@ export default function MemoryUpdateButton({
               paddingTop:
                 16,
               borderTop:
-                "1px solid #ddd",
+                "1px solid var(--border)",
               display:
                 "flex",
               gap: 10,
@@ -1687,10 +1687,10 @@ export default function MemoryUpdateButton({
                 background:
                   actionLoading ||
                   !canAccept
-                    ? "#aaa"
-                    : "#166534",
+                    ? "var(--surface-3)"
+                    : "var(--ok-text)",
                 color:
-                  "#fff",
+                  "var(--on-primary)",
                 cursor:
                   actionLoading ||
                   !canAccept
@@ -1734,11 +1734,11 @@ export default function MemoryUpdateButton({
                 borderRadius:
                   8,
                 border:
-                  "1px solid #b91c1c",
+                  "1px solid var(--danger-border)",
                 background:
-                  "#fff",
+                  "var(--surface)",
                 color:
-                  "#b91c1c",
+                  "var(--danger-text)",
                 cursor:
                   actionLoading
                     ? "default"

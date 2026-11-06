@@ -35,9 +35,12 @@ type ContinuityReport = {
 export default function ContinuityButton({
   projectId,
   chapterId,
+  mode = "draft",
 }: {
   projectId: string;
   chapterId: string;
+  /** draft — проверка готового текста; plan — проверка плана и сцен до написания. */
+  mode?: "draft" | "plan";
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -51,7 +54,7 @@ export default function ContinuityButton({
 
     try {
       const response = await fetch(
-        `/api/projects/${projectId}/chapters/${chapterId}/continuity`,
+        `/api/projects/${projectId}/chapters/${chapterId}/continuity${mode === "plan" ? "/plan" : ""}`,
         {
           method: "POST",
         }
@@ -117,24 +120,24 @@ export default function ContinuityButton({
   } {
     if (status === "PASS") {
       return {
-        background: "#e8f5e9",
-        color: "#287a35",
-        border: "#a5d6a7",
+        background: "var(--ok-bg)",
+        color: "var(--ok-text)",
+        border: "var(--ok-border)",
       };
     }
 
     if (status === "WARN") {
       return {
-        background: "#fff8e1",
-        color: "#8a6500",
-        border: "#ffe082",
+        background: "var(--warn-bg)",
+        color: "var(--warn-text)",
+        border: "var(--warn-border)",
       };
     }
 
     return {
-      background: "#ffebee",
-      color: "#b71c1c",
-      border: "#ef9a9a",
+      background: "var(--danger-bg)",
+      color: "var(--danger-text)",
+      border: "var(--danger-border)",
     };
   }
 
@@ -204,9 +207,9 @@ export default function ContinuityButton({
           borderRadius: 8,
           border: "none",
           background: loading
-            ? "#777"
-            : "#315a7d",
-          color: "#fff",
+            ? "var(--surface-3)"
+            : "var(--info-solid)",
+          color: "var(--on-primary)",
           cursor: loading
             ? "default"
             : "pointer",
@@ -215,8 +218,12 @@ export default function ContinuityButton({
         }}
       >
         {loading
-          ? "⏳ Проверяем главу..."
-          : "🔎 Проверить непрерывность"}
+          ? mode === "plan"
+            ? "⏳ Проверяем план..."
+            : "⏳ Проверяем главу..."
+          : mode === "plan"
+            ? "🔎 Проверить план и сцены"
+            : "🔎 Проверить непрерывность"}
       </button>
 
       {error && (
@@ -225,8 +232,8 @@ export default function ContinuityButton({
             marginTop: 12,
             padding: 12,
             borderRadius: 8,
-            background: "#fee2e2",
-            color: "#991b1b",
+            background: "var(--danger-bg)",
+            color: "var(--danger-text)",
             lineHeight: 1.5,
           }}
         >
@@ -238,9 +245,9 @@ export default function ContinuityButton({
         <div
           style={{
             marginTop: 16,
-            border: "1px solid #d8dee6",
+            border: "1px solid var(--info-border)",
             borderRadius: 10,
-            background: "#fff",
+            background: "var(--surface)",
             overflow: "hidden",
           }}
         >
@@ -248,7 +255,7 @@ export default function ContinuityButton({
             style={{
               padding: 18,
               borderBottom:
-                "1px solid #e5e7eb",
+                "1px solid var(--border-soft)",
             }}
           >
             <div
@@ -300,7 +307,7 @@ export default function ContinuityButton({
             <p
               style={{
                 margin: "12px 0 0",
-                color: "#444",
+                color: "var(--text-2)",
                 lineHeight: 1.6,
               }}
             >
@@ -314,8 +321,8 @@ export default function ContinuityButton({
             <div
               style={{
                 padding: 18,
-                color: "#287a35",
-                background: "#f7fcf7",
+                color: "var(--ok-text)",
+                background: "var(--ok-bg)",
                 fontWeight: 600,
               }}
             >
@@ -333,7 +340,7 @@ export default function ContinuityButton({
                 style={{
                   marginBottom: 14,
                   fontWeight: 700,
-                  color: "#333",
+                  color: "var(--text)",
                 }}
               >
                 Найдено проблем:{" "}
@@ -370,23 +377,23 @@ export default function ContinuityButton({
                       severityText === "HIGH"
                         ? {
                             background:
-                              "#ffebee",
+                              "var(--danger-bg)",
                             color:
-                              "#b71c1c",
+                              "var(--danger-text)",
                           }
                         : severityText ===
                           "MEDIUM"
                         ? {
                             background:
-                              "#fff8e1",
+                              "var(--warn-bg)",
                             color:
-                              "#8a6500",
+                              "var(--warn-text)",
                           }
                         : {
                             background:
-                              "#f5f5f5",
+                              "var(--surface-2)",
                             color:
-                              "#666",
+                              "var(--muted)",
                           };
 
                     const categoryText =
@@ -446,7 +453,7 @@ export default function ContinuityButton({
                         }
                         style={{
                           border:
-                            "1px solid #ddd",
+                            "1px solid var(--border)",
                           borderRadius: 9,
                           padding: 16,
                         }}
@@ -463,7 +470,7 @@ export default function ContinuityButton({
                         >
                           <strong
                             style={{
-                              color: "#333",
+                              color: "var(--text)",
                               lineHeight: 1.5,
                             }}
                           >
@@ -499,7 +506,7 @@ export default function ContinuityButton({
                               marginTop: 8,
                               fontSize: 12,
                               color:
-                                "#777",
+                                "var(--muted)",
                             }}
                           >
                             Тип:{" "}
@@ -513,7 +520,7 @@ export default function ContinuityButton({
                               marginTop: 8,
                               fontSize: 13,
                               color:
-                                "#555",
+                                "var(--text-2)",
                             }}
                           >
                             📍{" "}
@@ -532,12 +539,12 @@ export default function ContinuityButton({
                                 borderRadius:
                                   7,
                                 background:
-                                  "#f7f7f7",
+                                  "var(--surface-2)",
                                 fontSize: 13,
                                 lineHeight:
                                   1.5,
                                 color:
-                                  "#555",
+                                  "var(--text-2)",
                               }}
                             >
                               <strong>
@@ -566,12 +573,12 @@ export default function ContinuityButton({
                               borderRadius:
                                 7,
                               background:
-                                "#f3f7fb",
+                                "var(--info-bg)",
                               fontSize: 13,
                               lineHeight:
                                 1.5,
                               color:
-                                "#315a7d",
+                                "var(--info-text)",
                             }}
                           >
                             <strong>
@@ -600,10 +607,10 @@ export default function ContinuityButton({
                                 borderRadius:
                                   7,
                                 background:
-                                  "#f7f7f7",
+                                  "var(--surface-2)",
                                 fontSize: 12,
                                 color:
-                                  "#666",
+                                  "var(--muted)",
                                 whiteSpace:
                                   "pre-wrap",
                               }}

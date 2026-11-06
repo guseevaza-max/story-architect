@@ -117,20 +117,20 @@ export default function LoreLibrary({ projectId }: { projectId: string }) {
   }
 
   const inputStyle: React.CSSProperties = {
-    width: "100%", padding: 12, border: "1px solid #ccc",
+    width: "100%", padding: 12, border: "1px solid var(--border)",
     borderRadius: 8, font: "inherit", boxSizing: "border-box",
   };
 
   return (
-    <main style={{ maxWidth: 1100, margin: "0 auto", padding: 32, fontFamily: "Arial, sans-serif" }}>
+    <main style={{ maxWidth: 1100, margin: "0 auto", padding: 32, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
       <p><Link href={`/projects/${projectId}`}>← Назад в проект</Link></p>
       <h1>📚 Материалы мира</h1>
-      <p style={{ color: "#666", lineHeight: 1.6 }}>
+      <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
         Храни здесь исходные заметки о мире «Паралакса»: государства, локации,
         технологии, материалы, культуру и историю. Сохранение материалов не меняет Canon.
       </p>
 
-      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 24, marginTop: 24 }}>
+      <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 24, marginTop: 24 }}>
         <h2>{editingId ? "Редактировать материал" : "Добавить материал"}</h2>
         <form onSubmit={save} style={{ display: "grid", gap: 14 }}>
           <label>
@@ -151,10 +151,10 @@ export default function LoreLibrary({ projectId }: { projectId: string }) {
               placeholder="Вставь сюда заметки, описание места, выдержку из документа или правила мира…"
               style={{ ...inputStyle, marginTop: 6, resize: "vertical", lineHeight: 1.6 }}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))} />
-            <small style={{ color: "#777" }}>{form.content.length.toLocaleString("ru-RU")} / 200 000 символов</small>
+            <small style={{ color: "var(--muted)" }}>{form.content.length.toLocaleString("ru-RU")} / 200 000 символов</small>
           </label>
-          {error && <p role="alert" style={{ color: "#b42318" }}>{error}</p>}
-          {notice && <p role="status" style={{ color: "#26733a" }}>{notice}</p>}
+          {error && <p role="alert" style={{ color: "var(--danger-text)" }}>{error}</p>}
+          {notice && <p role="status" style={{ color: "var(--ok-text)" }}>{notice}</p>}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button disabled={busy} type="submit" style={{ padding: "11px 18px", borderRadius: 8, cursor: "pointer" }}>
               {busy ? "Сохраняю…" : editingId ? "Сохранить изменения" : "Добавить материал"}
@@ -167,14 +167,14 @@ export default function LoreLibrary({ projectId }: { projectId: string }) {
       <section style={{ marginTop: 32 }}>
         <h2>Сохранённые материалы ({materials.length})</h2>
         {loading ? <p>Загружаю материалы…</p> :
-          materials.length === 0 ? <p style={{ color: "#666" }}>Пока пусто. Добавь первый материал выше.</p> :
+          materials.length === 0 ? <p style={{ color: "var(--muted)" }}>Пока пусто. Добавь первый материал выше.</p> :
           <div style={{ display: "grid", gap: 14 }}>
             {materials.map(m => (
-              <article key={m.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20 }}>
+              <article key={m.id} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <div>
                     <h3 style={{ margin: "0 0 8px" }}>{m.title}</h3>
-                    <small style={{ color: "#666" }}>
+                    <small style={{ color: "var(--muted)" }}>
                       {categories.find(([value]) => value === m.category)?.[1] ?? "Другое"}
                       {" · "}Изменён: {new Date(m.updatedAt).toLocaleString("ru-RU")}
                     </small>
@@ -188,7 +188,7 @@ export default function LoreLibrary({ projectId }: { projectId: string }) {
                 <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.6, marginBottom: 0 }}>
                   {m.content.length > 1200 ? `${m.content.slice(0, 1200)}…` : m.content}
                 </p>
-                {m.content.length > 1200 && <small style={{ color: "#666" }}>Показана часть текста. Полный текст доступен при редактировании.</small>}
+                {m.content.length > 1200 && <small style={{ color: "var(--muted)" }}>Показана часть текста. Полный текст доступен при редактировании.</small>}
               </article>
             ))}
           </div>}

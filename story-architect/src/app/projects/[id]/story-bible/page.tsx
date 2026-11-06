@@ -308,21 +308,21 @@ export default function StoryBiblePage() {
     if (loadError) {
       return {
         text: `⚠️ ${loadError}`,
-        color: "#cc0000",
+        color: "var(--danger-text)",
       };
     }
 
     if (!loaded) {
       return {
         text: "Загрузка сохранённого текста…",
-        color: "#666",
+        color: "var(--muted)",
       };
     }
 
     if (saveState === "saving") {
       return {
         text: "Сохранение…",
-        color: "#666",
+        color: "var(--muted)",
       };
     }
 
@@ -331,14 +331,14 @@ export default function StoryBiblePage() {
         text: `⚠️ ${
           saveError || "Не удалось сохранить."
         } Текст остался на странице.`,
-        color: "#cc0000",
+        color: "var(--danger-text)",
       };
     }
 
     if (hasUnsaved) {
       return {
         text: "Есть несохранённые изменения",
-        color: "#8a5a00",
+        color: "var(--warn-text)",
       };
     }
 
@@ -349,7 +349,7 @@ export default function StoryBiblePage() {
             minute: "2-digit",
           })}`
         : "✓ Сохранено",
-      color: "#26733a",
+      color: "var(--ok-text)",
     };
   }
 
@@ -460,7 +460,7 @@ export default function StoryBiblePage() {
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <h1>Story Bible</h1>
@@ -542,7 +542,7 @@ export default function StoryBiblePage() {
           style={{
             marginTop: 20,
             padding: 16,
-            border: "1px solid #cc0000",
+            border: "1px solid var(--danger-border)",
             borderRadius: 8,
           }}
         >
@@ -564,7 +564,7 @@ export default function StoryBiblePage() {
               style={{
                 marginTop: 16,
                 padding: 16,
-                border: "1px solid #cc0000",
+                border: "1px solid var(--danger-border)",
                 borderRadius: 8,
               }}
             >
@@ -579,9 +579,9 @@ export default function StoryBiblePage() {
               style={{
                 marginTop: 16,
                 padding: 16,
-                border: "1px solid #ddd",
+                border: "1px solid var(--border)",
                 borderRadius: 8,
-                background: "#fafafa",
+                background: "var(--surface-2)",
                 lineHeight: 1.7,
               }}
             >
@@ -604,7 +604,7 @@ export default function StoryBiblePage() {
               )}
 
               {summary.failed.length > 0 && (
-                <div style={{ color: "#cc0000" }}>
+                <div style={{ color: "var(--danger-text)" }}>
                   Не удалось создать:{" "}
                   {summary.failed
                     .map(
@@ -647,7 +647,7 @@ export default function StoryBiblePage() {
                 summary.notMapped.secrets > 0 && (
                 <div
                   style={{
-                    color: "#666",
+                    color: "var(--muted)",
                     fontSize: 14,
                     marginTop: 8,
                   }}
@@ -687,7 +687,7 @@ export default function StoryBiblePage() {
                 <section
                   key={section.key}
                   style={{
-                    border: "1px solid #ccc",
+                    border: "1px solid var(--border)",
                     borderRadius: 8,
                     padding: 20,
                   }}

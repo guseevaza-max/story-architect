@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+import { loadNarrativeContext } from "@/lib/plotMap/loadNarrative";
+import { PLANNER_FUTURE_RULES } from "@/lib/plotMap/plannerRules";
 import { buildStoryState } from "@/lib/context/storyState";
 import { getOpenAIClient, hasOpenAIKey } from "@/lib/ai/provider";
 import { BudgetExceededError, createPrismaTrackingDeps, runTrackedAiCall } from "@/lib/ai/budget";
@@ -105,6 +107,13 @@ params,
       "scene_planner"
     );
 
+    // Долгосрочный сюжетный контекст (вехи и тайны). Пустая карта даёт пустую строку.
+    const narrative = await loadNarrativeContext({
+      bookId: chapter.bookId,
+      number: chapter.number,
+      projectId: project.id,
+    });
+
     // Пилот AI Usage: учёт токенов и стоимости и проверка месячного лимита.
     // Запрос к модели не менялся.
     const response = await runTrackedAiCall(
@@ -160,7 +169,7 @@ params,
 - ожидаемый результат сцены.
 
 Не пиши диалоги и художественную прозу.
-`,
+${narrative.isEmpty ? "" : `\n${PLANNER_FUTURE_RULES}\n`}`,
         },
         {
           role: "user",
@@ -178,7 +187,7 @@ ${chapter.authorIdea || "Не указана"}
 
 Состояние истории на начало главы:
 
-${storyState}${authorBlock}
+${storyState}${authorBlock}${narrative.promptBlock}
 
 Утверждённый план главы:
 

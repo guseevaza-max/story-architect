@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/app/components/LogoutButton";
 const prisma = new PrismaClient();
 
@@ -28,23 +29,26 @@ const userEmail = session.user.email || "";
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
-      <h1>Story Architect</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <h1>Story Architect</h1>
+        <ThemeToggle />
+      </div>
 <div
   style={{
     marginTop: 16,
     marginBottom: 30,
     padding: 16,
-    border: "1px solid #ddd",
+    border: "1px solid var(--border)",
     borderRadius: 10,
-    background: "#f8f8f8",
+    background: "var(--surface-2)",
   }}
 >
   <strong>{userName}</strong>
   {userEmail && (
-    <div style={{ color: "#666", marginTop: 4 }}>
+    <div style={{ color: "var(--muted)", marginTop: 4 }}>
       {userEmail}
     </div>
   )}
@@ -66,7 +70,7 @@ const userEmail = session.user.email || "";
             <div
               key={project.id}
               style={{
-                border: "1px solid #ccc",
+                border: "1px solid var(--border)",
                 borderRadius: 8,
                 padding: 20,
               }}
@@ -91,7 +95,7 @@ const userEmail = session.user.email || "";
       )}
 
       <div style={{ marginTop: 30 }}>
-        <Link href="/">
+        <Link href="/projects/new">
           ← Создать новый проект
         </Link>
       </div>

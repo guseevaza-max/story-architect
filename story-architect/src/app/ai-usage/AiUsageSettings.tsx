@@ -15,7 +15,7 @@ type Price = {
 };
 
 const input: React.CSSProperties = { padding: 6, marginRight: 8, marginBottom: 8 };
-const card: React.CSSProperties = { border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16, background: "#fff" };
+const card: React.CSSProperties = { border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16, background: "var(--surface)" };
 
 async function send(url: string, method: string, body: unknown) {
   const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -56,7 +56,7 @@ export default function AiUsageSettings({ limitUsd, warnPercent, prices }: { lim
 
       <section style={card}>
         <h2 style={{ marginTop: 0 }}>Тарифы моделей (USD за 1 млн токенов)</h2>
-        <p style={{ color: "#555" }}>
+        <p style={{ color: "var(--text-2)" }}>
           Стартовые цены взяты из вторичных источников и не подтверждены официальной страницей провайдера. Сверьте их
           с вашим кабинетом. Новая цена добавляется отдельной записью и действует на вызовы после сохранения, прошлые
           расходы не пересчитываются.
@@ -65,7 +65,7 @@ export default function AiUsageSettings({ limitUsd, warnPercent, prices }: { lim
           <thead>
             <tr>
               {["Провайдер", "Модель", "Вход", "Кэш", "Выход", "Действует с", "Источник"].map((h) => (
-                <th key={h} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #ddd" }}>{h}</th>
+                <th key={h} style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
           </thead>

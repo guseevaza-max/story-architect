@@ -229,7 +229,7 @@ export default async function MemoryPage({
         maxWidth: 1000,
         margin: "40px auto",
         padding: "0 24px 60px",
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <Link
@@ -237,7 +237,7 @@ export default async function MemoryPage({
         style={{
           display: "inline-block",
           marginBottom: 20,
-          color: "#555",
+          color: "var(--text-2)",
           textDecoration: "none",
         }}
       >
@@ -255,7 +255,7 @@ export default async function MemoryPage({
 
       <p
         style={{
-          color: "#666",
+          color: "var(--muted)",
           marginBottom: 28,
         }}
       >
@@ -269,11 +269,11 @@ export default async function MemoryPage({
 
       <section
         style={{
-          border: "2px solid #93c5fd",
+          border: "2px solid var(--info-border)",
           borderRadius: 12,
           padding: 24,
           marginBottom: 24,
-          background: "#eff6ff",
+          background: "var(--info-bg)",
         }}
       >
         <h2
@@ -286,7 +286,7 @@ export default async function MemoryPage({
         </h2>
 
         {summaries.length === 0 ? (
-          <p style={{ color: "#666" }}>
+          <p style={{ color: "var(--muted)" }}>
             Пока нет сохранённых резюме глав.
           </p>
         ) : (
@@ -301,8 +301,8 @@ export default async function MemoryPage({
               <article
                 key={summary.id}
                 style={{
-                  background: "#fff",
-                  border: "1px solid #dbeafe",
+                  background: "var(--surface)",
+                  border: "1px solid var(--info-border)",
                   borderRadius: 10,
                   padding: 18,
                 }}
@@ -321,7 +321,7 @@ export default async function MemoryPage({
                     <div
                       style={{
                         fontSize: 13,
-                        color: "#666",
+                        color: "var(--muted)",
                       }}
                     >
                       Глава{" "}
@@ -342,7 +342,7 @@ export default async function MemoryPage({
                     href={`/projects/${project.id}/chapters/${summary.chapter.id}`}
                     style={{
                       fontSize: 13,
-                      color: "#2563eb",
+                      color: "var(--info-text)",
                       textDecoration:
                         "none",
                     }}
@@ -406,7 +406,7 @@ export default async function MemoryPage({
                           marginTop: 8,
                           padding: 14,
                           background:
-                            "#f8fafc",
+                            "var(--info-bg)",
                           borderRadius: 8,
                           overflowX:
                             "auto",
@@ -436,16 +436,16 @@ export default async function MemoryPage({
       {unconfirmedItems.length > 0 && (
         <section
           style={{
-            border: "2px solid #e0b36a",
+            border: "2px solid var(--warn-border)",
             borderRadius: 12,
             padding: 24,
             marginBottom: 24,
-            background: "#fffaf0",
+            background: "var(--warn-bg)",
           }}
         >
           <h2 style={{ margin: 0 }}>⚠️ Ожидает вашего решения</h2>
 
-          <p style={{ color: "#666", lineHeight: 1.5 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.5 }}>
             Эти пункты AI пометил как неуверенные или конфликтующие. Они
             сохранены, но НЕ считаются подтверждённым Canon и не передаются
             Architect, Writer и Continuity.
@@ -467,10 +467,10 @@ export default async function MemoryPage({
 
       <section
         style={{
-          border: "2px solid #c9b7e8",
+          border: "2px solid var(--violet-border)",
           borderRadius: 12,
           padding: 24,
-          background: "#faf8ff",
+          background: "var(--violet-bg)",
         }}
       >
         <div
@@ -495,7 +495,7 @@ export default async function MemoryPage({
             <p
               style={{
                 margin: "6px 0 0",
-                color: "#666",
+                color: "var(--muted)",
                 lineHeight: 1.5,
               }}
             >
@@ -509,8 +509,8 @@ export default async function MemoryPage({
             style={{
               padding: "7px 12px",
               borderRadius: 999,
-              background: "#ede9fe",
-              color: "#6b21a8",
+              background: "var(--info-bg)",
+              color: "var(--violet-text)",
               fontSize: 13,
               fontWeight: 600,
               whiteSpace: "nowrap",
@@ -528,7 +528,7 @@ export default async function MemoryPage({
         {memoryChunks.length === 0 ? (
           <p
             style={{
-              color: "#666",
+              color: "var(--muted)",
               marginTop: 24,
             }}
           >
@@ -582,9 +582,9 @@ export default async function MemoryPage({
                       <article
                         key={chunk.id}
                         style={{
-                          background: "#fff",
+                          background: "var(--surface)",
                           border:
-                            "1px solid #ddd",
+                            "1px solid var(--border)",
                           borderRadius: 10,
                           padding: 16,
                         }}
@@ -603,7 +603,7 @@ export default async function MemoryPage({
                             style={{
                               marginTop: 10,
                               fontSize: 12,
-                              color: "#777",
+                              color: "var(--muted)",
                             }}
                           >
                             Источник:{" "}
@@ -611,7 +611,7 @@ export default async function MemoryPage({
                               href={`/projects/${project.id}/chapters/${chunk.chapter.id}`}
                               style={{
                                 color:
-                                  "#2563eb",
+                                  "var(--info-text)",
                                 textDecoration:
                                   "none",
                               }}

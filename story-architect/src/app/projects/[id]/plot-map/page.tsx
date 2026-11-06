@@ -19,7 +19,7 @@ export default async function PlotMapPage({ params }: { params: Promise<{ id: st
     <main style={{ maxWidth: 960, margin: "0 auto", padding: 24 }}>
       <Link href={`/projects/${project.id}`}>← К проекту</Link>
       <h1>🗺️ Сюжетная карта</h1>
-      <p style={{ color: "#555" }}>
+      <p style={{ color: "var(--text-2)" }}>
         Замысел книги, будущие вехи и тайны. Всё это заполняет только автор: ИИ карту не меняет.
         Номер главы указывать не обязательно.
       </p>

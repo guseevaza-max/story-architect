@@ -18,9 +18,9 @@ export default function LogoutButton() {
       style={{
         marginTop: 12,
         padding: "8px 14px",
-        border: "1px solid #ccc",
+        border: "1px solid var(--border)",
         borderRadius: 8,
-        background: "#fff",
+        background: "var(--surface)",
         cursor: "pointer",
       }}
     >

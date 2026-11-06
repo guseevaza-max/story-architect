@@ -23,6 +23,8 @@ export const AI_LIMITS: Record<string, AiLimits> = {
   MEMORY_EXTRACTION: { typicalInputTokens: 30_000, maxInputTokens: 150_000, maxOutputTokens: 16_000 },
   LORE_EXTRACTION: { typicalInputTokens: 20_000, maxInputTokens: 100_000, maxOutputTokens: 12_000 },
   CONTINUITY_CHECK: { typicalInputTokens: 25_000, maxInputTokens: 150_000, maxOutputTokens: 16_000 },
+  // Проверка плана и сцен до написания: текста главы нет, вход меньше.
+  CONTINUITY_PLAN: { typicalInputTokens: 15_000, maxInputTokens: 100_000, maxOutputTokens: 12_000 },
   CONTINUITY_SUGGESTIONS: { typicalInputTokens: 15_000, maxInputTokens: 100_000, maxOutputTokens: 12_000 },
   CONTINUITY_APPLY: { typicalInputTokens: 25_000, maxInputTokens: 150_000, maxOutputTokens: 32_000 },
   // Соавтор: вход ограничен сборщиком контекста (≈40k знаков) плюс окно беседы.

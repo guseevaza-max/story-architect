@@ -1,4 +1,5 @@
 import Link from "next/link";
+import StatusBadge from "@/components/StatusBadge";
 import { notFound, redirect } from "next/navigation";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
@@ -67,14 +68,14 @@ export default async function ChaptersPage({
         maxWidth: 1000,
         margin: "0 auto",
         padding: "32px 20px 60px",
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 24 }}>
         <Link
           href={`/projects/${project.id}`}
           style={{
-            color: "#555",
+            color: "var(--text-2)",
             textDecoration: "none",
           }}
         >
@@ -95,7 +96,7 @@ export default async function ChaptersPage({
         <p
           style={{
             marginTop: 10,
-            color: "#666",
+            color: "var(--muted)",
             lineHeight: 1.6,
           }}
         >
@@ -105,7 +106,7 @@ export default async function ChaptersPage({
 
       <section
         style={{
-          border: "1px solid #ddd",
+          border: "1px solid var(--border)",
           borderRadius: 14,
           padding: 24,
           marginBottom: 24,
@@ -135,10 +136,10 @@ export default async function ChaptersPage({
         {chapters.length === 0 ? (
           <div
             style={{
-              border: "1px solid #ddd",
+              border: "1px solid var(--border)",
               borderRadius: 14,
               padding: 24,
-              color: "#666",
+              color: "var(--muted)",
             }}
           >
             Пока нет ни одной главы.
@@ -159,7 +160,7 @@ export default async function ChaptersPage({
                   display: "block",
                   textDecoration: "none",
                   color: "inherit",
-                  border: "1px solid #ddd",
+                  border: "1px solid var(--border)",
                   borderRadius: 14,
                   padding: 20,
                 }}
@@ -175,7 +176,7 @@ export default async function ChaptersPage({
                   <div>
                     <div
                       style={{
-                        color: "#777",
+                        color: "var(--muted)",
                         fontSize: 13,
                         marginBottom: 6,
                       }}
@@ -196,7 +197,7 @@ export default async function ChaptersPage({
 
                     <div
                       style={{
-                        color: "#666",
+                        color: "var(--muted)",
                         fontSize: 14,
                         lineHeight: 1.5,
                       }}
@@ -206,19 +207,11 @@ export default async function ChaptersPage({
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      flexShrink: 0,
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      background: "#fef3c7",
-                      fontSize: 12,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {statusLabels[chapter.status] ||
-                      chapter.status}
-                  </div>
+                  <StatusBadge
+                    status={chapter.status}
+                    label={statusLabels[chapter.status] || chapter.status}
+                    style={{ flexShrink: 0 }}
+                  />
                 </div>
               </Link>
             ))}

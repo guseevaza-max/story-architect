@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useToast } from "@/components/Toast";
+import { countWords } from "@/lib/ux/nav";
+import { isSaveShortcut, wordsLabel } from "@/lib/ux/writing";
 import { COAUTHOR_ATTACH_EVENT, type AttachDetail } from "@/lib/coauthor/ui";
 import {
   formatMark,
@@ -25,7 +28,44 @@ export default function DraftEditor({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const toast = useToast();
+  const [focusMode, setFocusMode] = useState(false);
+
+  // уведомления дополняют строки статуса рядом с кнопками, а не заменяют их
+  useEffect(() => {
+    if (error) toast.error(error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
+  useEffect(() => {
+    if (saved) toast.success("Черновик сохранён");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
+
+  // режим письма: Esc выходит, прокрутка страницы под редактором отключена
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setFocusMode(false);
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [focusMode]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Предупреждение при закрытии страницы с несохранённым текстом.
+  const dirty = !saved && text !== initialText;
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const [pending, setPending] = useState<{
     kind: MarkKind;
     start: number;
@@ -247,9 +287,9 @@ export default function DraftEditor({
 
   return (
     <div>
-      <div style={{ marginBottom: 14, padding: 14, border: "1px solid #ddd", borderRadius: 10, background: "#fafafa" }}>
+      <div style={{ marginBottom: 14, padding: 14, border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface-2)" }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Шаблоны черновика</div>
-        <p style={{ margin: "0 0 12px", fontSize: 13, color: "#666", lineHeight: 1.5 }}>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
           Выбирай подходящую болванку или просто пиши как удобно. Шаблон добавляется в конец текста и не удаляет уже написанное.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -260,9 +300,9 @@ export default function DraftEditor({
               onClick={() => insertTemplate(template.text)}
               style={{
                 padding: "8px 12px",
-                border: "1px solid #ccc",
+                border: "1px solid var(--border)",
                 borderRadius: 8,
-                background: "#fff",
+                background: "var(--surface)",
                 cursor: "pointer",
                 fontSize: 13,
               }}
@@ -272,9 +312,9 @@ export default function DraftEditor({
           ))}
         </div>
       </div>
-      <div style={{ marginBottom: 10, padding: 12, border: "1px solid #ddd", borderRadius: 10, background: "#fafafa" }}>
+      <div style={{ marginBottom: 10, padding: 12, border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface-2)" }}>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>Пометки редактора</div>
-        <p style={{ margin: "0 0 10px", fontSize: 13, color: "#666", lineHeight: 1.5 }}>
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
           Выдели фрагмент в тексте и нажми кнопку. Пометка попадёт в текст, а «Доработать по заметкам» учтёт её и вернёт чистый текст.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -287,7 +327,7 @@ export default function DraftEditor({
               key={kind}
               type="button"
               onClick={() => beginMark(kind)}
-              style={{ padding: "8px 12px", border: "1px solid #ccc", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 13 }}
+              style={{ padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", cursor: "pointer", fontSize: 13 }}
             >
               {label}
             </button>
@@ -296,15 +336,15 @@ export default function DraftEditor({
             type="button"
             onClick={discussWithCoauthor}
             title="Откроет панель Соавтора с выделенным фрагментом. Текст главы не изменится."
-            style={{ padding: "8px 12px", border: "1px solid #9bb7d4", borderRadius: 8, background: "#f4f7fb", cursor: "pointer", fontSize: 13 }}
+            style={{ padding: "8px 12px", border: "1px solid var(--info-border)", borderRadius: 8, background: "var(--info-bg)", cursor: "pointer", fontSize: 13 }}
           >
             🤝 Обсудить с Соавтором
           </button>
         </div>
 
         {pending && (
-          <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "#fff", border: "1px solid #9bb7d4" }}>
-            <div style={{ fontSize: 13, color: "#555", marginBottom: 8 }}>
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--info-border)" }}>
+            <div style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 8 }}>
               {pending.kind} к фрагменту: «{pending.fragment.length > 160 ? pending.fragment.slice(0, 160) + "…" : pending.fragment}»
             </div>
             <input
@@ -316,13 +356,13 @@ export default function DraftEditor({
                 if (event.key === "Escape") setPending(null);
               }}
               placeholder={pending.kind === "ПЕРЕПИСАТЬ" ? "Как переписать (необязательно)" : pending.kind === "ВОПРОС" ? "Твой вопрос" : "Твой комментарий"}
-              style={{ width: "100%", padding: 10, boxSizing: "border-box", border: "1px solid #ccc", borderRadius: 8, fontSize: 14 }}
+              style={{ width: "100%", padding: 10, boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: 8, fontSize: 14 }}
             />
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button type="button" onClick={confirmMark} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#111", color: "#fff", cursor: "pointer", fontSize: 13 }}>
+              <button type="button" onClick={confirmMark} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "var(--primary)", color: "var(--on-primary)", cursor: "pointer", fontSize: 13 }}>
                 Добавить пометку
               </button>
-              <button type="button" onClick={() => setPending(null)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontSize: 13 }}>
+              <button type="button" onClick={() => setPending(null)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", fontSize: 13 }}>
                 Отмена
               </button>
             </div>
@@ -335,15 +375,15 @@ export default function DraftEditor({
               Пометок в тексте: {marks.length}. Перед утверждением главы их нужно разобрать.
             </div>
             {marks.map((mark, index) => (
-              <div key={index} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: "1px solid #eee", fontSize: 13, lineHeight: 1.5 }}>
+              <div key={index} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: "1px solid var(--border-soft)", fontSize: 13, lineHeight: 1.5 }}>
                 <div style={{ flex: 1 }}>
                   <strong>{mark.kind}</strong> · «{mark.fragment.length > 120 ? mark.fragment.slice(0, 120) + "…" : mark.fragment}»
-                  {mark.comment ? <div style={{ color: "#444" }}>{mark.comment}</div> : null}
+                  {mark.comment ? <div style={{ color: "var(--text-2)" }}>{mark.comment}</div> : null}
                 </div>
-                <button type="button" onClick={() => showMark(index)} style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 12 }}>
+                <button type="button" onClick={() => showMark(index)} style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--surface)", cursor: "pointer", fontSize: 12 }}>
                   Показать
                 </button>
-                <button type="button" onClick={() => dropMark(index)} style={{ padding: "4px 8px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 12 }}>
+                <button type="button" onClick={() => dropMark(index)} style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--surface)", cursor: "pointer", fontSize: 12 }}>
                   ✕ Убрать
                 </button>
               </div>
@@ -351,31 +391,82 @@ export default function DraftEditor({
           </div>
         )}
       </div>
-      <textarea
-        ref={textareaRef}
+      <div
+        className={focusMode ? "theme-user" : undefined}
+        style={focusMode ? { position: "fixed", inset: 0, zIndex: 70, background: "var(--bg)", display: "flex", flexDirection: "column" } : undefined}
+      >
+        {focusMode ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "10px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+            <strong>Режим письма</strong>
+            <span style={{ color: "var(--muted)", fontSize: 14 }}>{wordsLabel(countWords(text))}</span>
+            <span style={{ fontSize: 14, color: saved ? "var(--ok-text)" : "var(--faint)" }}>{saving ? "Сохраняю…" : saved ? "✓ Сохранено" : text === initialText ? "" : "Есть несохранённые изменения"}</span>
+            <span style={{ flex: 1 }} />
+            <button type="button" className="sa-btn sa-btn-primary" onClick={handleSave} disabled={saving}>
+              Сохранить <small style={{ opacity: 0.7 }}>Ctrl S</small>
+            </button>
+            <button type="button" className="sa-btn" onClick={() => setFocusMode(false)}>
+              Выйти <small style={{ opacity: 0.7 }}>Esc</small>
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 12 }}>
+            <span style={{ color: "var(--muted)", fontSize: 14 }}>{wordsLabel(countWords(text))}</span>
+            <button type="button" className="sa-btn" onClick={() => setFocusMode(true)} title="Скрыть всё, кроме текста">
+              🖋 Режим письма
+            </button>
+          </div>
+        )}
+        <textarea
+          ref={textareaRef}
         value={text}
+        onKeyDown={(event) => {
+          if (isSaveShortcut(event)) {
+            event.preventDefault();
+            if (!saving) void handleSave();
+          }
+        }}
         onChange={(event) => {
           setText(event.target.value);
           setSaved(false);
         }}
-        style={{
-          width: "100%",
-          minHeight: 700,
-          padding: 20,
-          boxSizing: "border-box",
-          border: "1px solid #ccc",
-          borderRadius: 10,
-          resize: "vertical",
-          fontFamily:
-            "Georgia, 'Times New Roman', serif",
-          fontSize: 17,
-          lineHeight: 1.8,
-          color: "#222",
-          background: "#fff",
-          outline: "none",
-        }}
+        style={
+          focusMode
+            ? {
+                flex: 1,
+                width: "100%",
+                maxWidth: 780,
+                margin: "0 auto",
+                padding: "36px 20px 80px",
+                boxSizing: "border-box",
+                border: 0,
+                borderRadius: 0,
+                resize: "none",
+                fontFamily: "var(--font-read), Georgia, serif",
+                fontSize: 19,
+                lineHeight: 1.85,
+                color: "var(--text)",
+                background: "transparent",
+                outline: "none",
+              }
+            : {
+                width: "100%",
+                minHeight: 700,
+                padding: 20,
+                boxSizing: "border-box",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                resize: "vertical",
+                fontFamily: "var(--font-read), Georgia, serif",
+                fontSize: 17,
+                lineHeight: 1.8,
+                color: "var(--text)",
+                background: "var(--surface)",
+                outline: "none",
+              }
+        }
         placeholder="Черновик главы появится здесь..."
       />
+      </div>
 
       <div
         style={{
@@ -394,9 +485,9 @@ export default function DraftEditor({
             borderRadius: 8,
             border: "none",
             background: saving
-              ? "#777"
-              : "#111",
-            color: "#fff",
+              ? "var(--surface-3)"
+              : "var(--primary)",
+            color: "var(--on-primary)",
             cursor: saving
               ? "default"
               : "pointer",
@@ -416,8 +507,8 @@ export default function DraftEditor({
           style={{
             padding: "11px 18px",
             borderRadius: 8,
-            border: "1px solid #9bb7d4",
-            background: "#fff",
+            border: "1px solid var(--info-border)",
+            background: "var(--surface)",
             cursor: revising || saving ? "default" : "pointer",
             fontWeight: 600,
             fontSize: 14,
@@ -429,7 +520,7 @@ export default function DraftEditor({
         {saved && (
           <span
             style={{
-              color: "#287a35",
+              color: "var(--ok-text)",
               fontSize: 14,
               fontWeight: 600,
             }}
@@ -441,7 +532,7 @@ export default function DraftEditor({
         {error && (
           <span
             style={{
-              color: "#991b1b",
+              color: "var(--danger-text)",
               fontSize: 14,
             }}
           >
@@ -455,13 +546,13 @@ export default function DraftEditor({
           style={{
             marginTop: 20,
             padding: 18,
-            border: "2px solid #9bb7d4",
+            border: "2px solid var(--info-border)",
             borderRadius: 12,
-            background: "#f8fbff",
+            background: "var(--info-bg)",
           }}
         >
           <h3 style={{ marginTop: 0 }}>Предложенная версия главы</h3>
-          <p style={{ color: "#666", fontSize: 14, lineHeight: 1.5 }}>
+          <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
             Это предложение, черновик пока не изменён. Если принять, текст главы
             заменится этой версией, а блок заметок исчезнет (он уже вплетён в
             текст).
@@ -473,8 +564,8 @@ export default function DraftEditor({
                 margin: "12px 0",
                 padding: 12,
                 borderRadius: 8,
-                background: "#fff8e6",
-                border: "1px solid #f0d58a",
+                background: "var(--warn-bg)",
+                border: "1px solid var(--warn-border)",
                 whiteSpace: "pre-wrap",
                 fontSize: 14,
               }}
@@ -493,12 +584,12 @@ export default function DraftEditor({
               minHeight: 400,
               padding: 16,
               boxSizing: "border-box",
-              border: "1px solid #ccc",
+              border: "1px solid var(--border)",
               borderRadius: 10,
-              fontFamily: "Georgia, 'Times New Roman', serif",
+              fontFamily: "var(--font-read), Georgia, serif",
               fontSize: 16,
               lineHeight: 1.7,
-              background: "#fff",
+              background: "var(--surface)",
             }}
           />
 
@@ -511,8 +602,8 @@ export default function DraftEditor({
                 padding: "11px 18px",
                 borderRadius: 8,
                 border: "none",
-                background: "#111",
-                color: "#fff",
+                background: "var(--primary)",
+                color: "var(--on-primary)",
                 cursor: "pointer",
                 fontWeight: 600,
                 fontSize: 14,
@@ -526,8 +617,8 @@ export default function DraftEditor({
               style={{
                 padding: "11px 18px",
                 borderRadius: 8,
-                border: "1px solid #ccc",
-                background: "#fff",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
                 cursor: "pointer",
                 fontSize: 14,
               }}

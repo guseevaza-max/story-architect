@@ -264,7 +264,7 @@ export default function ContinuitySuggestionsButton({
         marginTop: 24,
         paddingTop: 20,
         borderTop:
-          "1px solid #ddd",
+          "1px solid var(--border)",
       }}
     >
       <div>
@@ -280,7 +280,7 @@ export default function ContinuitySuggestionsButton({
         <p
           style={{
             margin: 0,
-            color: "#666",
+            color: "var(--muted)",
             lineHeight: 1.5,
             fontSize: 14,
           }}
@@ -304,8 +304,8 @@ export default function ContinuitySuggestionsButton({
             padding: "10px 16px",
             borderRadius: 8,
             border: "none",
-            background: "#111",
-            color: "#fff",
+            background: "var(--primary)",
+            color: "var(--on-primary)",
             cursor:
               loading || applying
                 ? "default"
@@ -328,10 +328,10 @@ export default function ContinuitySuggestionsButton({
             marginTop: 16,
             padding: 12,
             borderRadius: 8,
-            background: "#fff1f1",
+            background: "var(--danger-bg)",
             border:
-              "1px solid #e5b5b5",
-            color: "#9b2222",
+              "1px solid var(--danger-border)",
+            color: "var(--danger-text)",
             fontSize: 14,
           }}
         >
@@ -350,9 +350,9 @@ export default function ContinuitySuggestionsButton({
               marginBottom: 16,
               padding: 14,
               borderRadius: 8,
-              background: "#f5f7fa",
+              background: "var(--info-bg)",
               border:
-                "1px solid #e1e5ea",
+                "1px solid var(--border-soft)",
             }}
           >
             <strong>
@@ -363,7 +363,7 @@ export default function ContinuitySuggestionsButton({
             <div
               style={{
                 marginTop: 5,
-                color: "#666",
+                color: "var(--muted)",
                 fontSize: 13,
               }}
             >
@@ -384,8 +384,8 @@ export default function ContinuitySuggestionsButton({
                   padding: 18,
                   borderRadius: 10,
                   border:
-                    "1px solid #ddd",
-                  background: "#fff",
+                    "1px solid var(--border)",
+                  background: "var(--surface)",
                 }}
               >
                 <h4
@@ -402,7 +402,7 @@ export default function ContinuitySuggestionsButton({
                 <div
                   style={{
                     marginBottom: 14,
-                    color: "#777",
+                    color: "var(--muted)",
                     fontSize: 13,
                   }}
                 >
@@ -440,12 +440,12 @@ export default function ContinuitySuggestionsButton({
                           borderRadius: 8,
                           border:
                             isSelected
-                              ? "2px solid #111"
-                              : "1px solid #ddd",
+                              ? "2px solid var(--text)"
+                              : "1px solid var(--border)",
                           background:
                             isSelected
-                              ? "#f3f3f3"
-                              : "#fff",
+                              ? "var(--surface-3)"
+                              : "var(--surface)",
                           cursor:
                             applying
                               ? "default"
@@ -481,12 +481,12 @@ export default function ContinuitySuggestionsButton({
                                 "center",
                               background:
                                 isSelected
-                                  ? "#111"
-                                  : "#eee",
+                                  ? "var(--primary)"
+                                  : "var(--surface-3)",
                               color:
                                 isSelected
-                                  ? "#fff"
-                                  : "#555",
+                                  ? "var(--on-primary)"
+                                  : "var(--text-2)",
                               fontSize: 12,
                               fontWeight: 700,
                               flexShrink: 0,
@@ -507,7 +507,7 @@ export default function ContinuitySuggestionsButton({
                         <div
                           style={{
                             marginLeft: 32,
-                            color: "#555",
+                            color: "var(--text-2)",
                             fontSize: 14,
                             lineHeight: 1.5,
                           }}
@@ -527,7 +527,7 @@ export default function ContinuitySuggestionsButton({
                                 "10px 0 0 48px",
                               padding: 0,
                               color:
-                                "#555",
+                                "var(--text-2)",
                               fontSize: 13,
                             }}
                           >
@@ -560,10 +560,10 @@ export default function ContinuitySuggestionsButton({
                               padding: 10,
                               borderRadius: 6,
                               background:
-                                "#f7f7f7",
+                                "var(--surface-2)",
                               fontSize: 13,
                               color:
-                                "#555",
+                                "var(--text-2)",
                               fontStyle:
                                 "italic",
                             }}
@@ -589,9 +589,9 @@ export default function ContinuitySuggestionsButton({
               padding: 18,
               borderRadius: 10,
               background:
-                "#f7fff8",
+                "var(--ok-bg)",
               border:
-                "2px solid #b8d8bf",
+                "2px solid var(--ok-border)",
             }}
           >
             <h4
@@ -607,7 +607,7 @@ export default function ContinuitySuggestionsButton({
               style={{
                 margin:
                   "0 0 14px",
-                color: "#666",
+                color: "var(--muted)",
                 fontSize: 14,
                 lineHeight: 1.5,
               }}
@@ -634,9 +634,9 @@ export default function ContinuitySuggestionsButton({
                 border: "none",
                 background:
                   selectedCount > 0
-                    ? "#111"
-                    : "#bbb",
-                color: "#fff",
+                    ? "var(--primary)"
+                    : "var(--surface-3)",
+                color: "var(--on-primary)",
                 cursor:
                   selectedCount ===
                     0 ||
@@ -660,8 +660,8 @@ export default function ContinuitySuggestionsButton({
             padding: 20,
             borderRadius: 10,
             border:
-              "2px solid #9bb7d4",
-            background: "#f8fbff",
+              "2px solid var(--info-border)",
+            background: "var(--info-bg)",
           }}
         >
           <h3
@@ -677,9 +677,9 @@ export default function ContinuitySuggestionsButton({
               marginBottom: 16,
               padding: 14,
               borderRadius: 8,
-              background: "#fff",
+              background: "var(--surface)",
               border:
-                "1px solid #ddd",
+                "1px solid var(--border)",
               whiteSpace:
                 "pre-wrap",
               lineHeight: 1.7,
@@ -696,7 +696,7 @@ export default function ContinuitySuggestionsButton({
               marginBottom: 18,
               padding: 14,
               borderRadius: 8,
-              background: "#f3f3f3",
+              background: "var(--surface-3)",
               fontSize: 14,
               lineHeight: 1.5,
             }}
@@ -733,8 +733,8 @@ export default function ContinuitySuggestionsButton({
                 borderRadius: 8,
                 border: "none",
                 background:
-                  "#111",
-                color: "#fff",
+                  "var(--primary)",
+                color: "var(--on-primary)",
                 cursor:
                   applying
                     ? "default"
@@ -761,11 +761,11 @@ export default function ContinuitySuggestionsButton({
                   "11px 18px",
                 borderRadius: 8,
                 border:
-                  "1px solid #ccc",
+                  "1px solid var(--border)",
                 background:
-                  "#fff",
+                  "var(--surface)",
                 color:
-                  "#222",
+                  "var(--text)",
                 cursor:
                   applying
                     ? "default"

@@ -10,6 +10,8 @@ import {
 } from "@prisma/client";
 import { auth } from "@/auth";
 import { loadAuthorDirectionBlock } from "@/lib/authorIntent/load";
+import { loadNarrativeContext } from "@/lib/plotMap/loadNarrative";
+import { PLANNER_FUTURE_RULES } from "@/lib/plotMap/plannerRules";
 import {
   getOpenAIClient,
   hasOpenAIKey,
@@ -286,6 +288,13 @@ ${
       "architect"
     );
 
+    // Долгосрочный сюжетный контекст (вехи и тайны). Пустая карта даёт пустую строку.
+    const narrative = await loadNarrativeContext({
+      bookId: chapter.bookId,
+      number: chapter.number,
+      projectId: project.id,
+    });
+
     // =====================================================
     // 9. SYSTEM PROMPT
     // =====================================================
@@ -365,7 +374,7 @@ Architect создаёт только предложение плана глав
 8. openQuestions
 Что осталось неопределённым и требует решения автора.
 Не превращай вопросы в факты.
-`;
+${narrative.isEmpty ? "" : `\n${PLANNER_FUTURE_RULES}\n`}`;
 
     // =====================================================
     // 10. USER PROMPT
@@ -444,7 +453,7 @@ STORY STATE
 не противоречь ему без явного основания в идее автора)
 =====================================================
 
-${storyState}${authorBlock}
+${storyState}${authorBlock}${narrative.promptBlock}
 
 =====================================================
 TASK

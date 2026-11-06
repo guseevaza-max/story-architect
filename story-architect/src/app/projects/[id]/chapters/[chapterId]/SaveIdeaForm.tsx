@@ -78,12 +78,12 @@ export default function SaveIdeaForm({
           width: "100%",
           boxSizing: "border-box",
           padding: 14,
-          border: "1px solid #ccc",
+          border: "1px solid var(--border)",
           borderRadius: 10,
           fontSize: 15,
           lineHeight: 1.6,
           resize: "vertical",
-          fontFamily: "Arial, sans-serif",
+          fontFamily: "var(--font-ui), system-ui, sans-serif",
         }}
       />
 
@@ -98,7 +98,7 @@ export default function SaveIdeaForm({
       >
         <div
           style={{
-            color: message === "Идея сохранена." ? "#166534" : "#777",
+            color: message === "Идея сохранена." ? "var(--ok-text)" : "var(--muted)",
             fontSize: 13,
             lineHeight: 1.5,
           }}
@@ -114,8 +114,8 @@ export default function SaveIdeaForm({
             padding: "11px 18px",
             border: "none",
             borderRadius: 9,
-            background: "#111",
-            color: "#fff",
+            background: "var(--primary)",
+            color: "var(--on-primary)",
             fontSize: 14,
             fontWeight: 600,
             cursor: saving ? "default" : "pointer",

@@ -7,16 +7,16 @@ import type { UsageGroup } from "@/lib/ai/usage";
 import AiUsageSettings from "./AiUsageSettings";
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
-const th: React.CSSProperties = { textAlign: "left", padding: "6px 10px", borderBottom: "1px solid #ddd" };
-const td: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid #eee" };
-const card: React.CSSProperties = { border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16, background: "#fff" };
+const th: React.CSSProperties = { textAlign: "left", padding: "6px 10px", borderBottom: "1px solid var(--border)" };
+const td: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid var(--border-soft)" };
+const card: React.CSSProperties = { border: "1px solid var(--border)", borderRadius: 12, padding: 20, marginBottom: 16, background: "var(--surface)" };
 
 function Table({ title, groups, label }: { title: string; groups: UsageGroup[]; label?: (key: string) => string }) {
   return (
     <section style={card}>
       <h2 style={{ marginTop: 0 }}>{title}</h2>
       {groups.length === 0 ? (
-        <p style={{ color: "#555" }}>Пока нет вызовов.</p>
+        <p style={{ color: "var(--text-2)" }}>Пока нет вызовов.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -59,27 +59,27 @@ export default async function AiUsagePage({ searchParams }: { searchParams: Prom
 
   return (
     <main style={{ maxWidth: 1000, margin: "0 auto", padding: 24 }}>
-      <Link href="/">← На главную</Link>
+      <Link href="/dashboard">← К проектам</Link>
       <h1>💰 Расходы ИИ</h1>
       <form method="get" style={{ marginBottom: 16 }}>
         Месяц (ГГГГ-ММ, по UTC): <input name="month" defaultValue={month} size={8} />{" "}
         <button type="submit">Показать</button>
       </form>
 
-      <section style={{ ...card, borderColor: warn ? "#e8a5a0" : "#ddd", background: warn ? "#fdecea" : "#fff" }}>
+      <section style={{ ...card, borderColor: warn ? "var(--danger-border)" : "var(--border)", background: warn ? "var(--danger-bg)" : "var(--surface)" }}>
         <h2 style={{ marginTop: 0 }}>Лимит месяца {month}</h2>
         <p style={{ fontSize: 20, margin: "4px 0" }}>
           {usd(data.budgetUsedUsd)} из {usd(data.limitUsd)} ({percent.toFixed(1)}%)
         </p>
-        <div style={{ height: 10, background: "#eee", borderRadius: 5, overflow: "hidden", maxWidth: 400 }}>
-          <div style={{ width: `${Math.min(percent, 100)}%`, height: "100%", background: warn ? "#c62828" : "#2e7d32" }} />
+        <div style={{ height: 10, background: "var(--surface-3)", borderRadius: 5, overflow: "hidden", maxWidth: 400 }}>
+          <div style={{ width: `${Math.min(percent, 100)}%`, height: "100%", background: warn ? "var(--danger-solid)" : "var(--ok-solid)" }} />
         </div>
-        {warn && <p style={{ color: "#b00020" }}>Использовано {data.warnPercent}% и больше. При 100% новые вызовы блокируются.</p>}
-        <p style={{ color: "#555" }}>
+        {warn && <p style={{ color: "var(--danger-text)" }}>Использовано {data.warnPercent}% и больше. При 100% новые вызовы блокируются.</p>}
+        <p style={{ color: "var(--text-2)" }}>
           В счётчик входят известные расходы ({usd(data.counter.spentUsd)}), консервативный учёт вызовов с неизвестной
           стоимостью ({usd(data.counter.assumedUsd)}) и резерв выполняющихся вызовов ({usd(data.counter.reservedUsd)}).
         </p>
-        <p style={{ color: "#555" }}>
+        <p style={{ color: "var(--text-2)" }}>
           Учтены вызовы только тех функций, которые подключены к учёту (сейчас пилот: Scene Planner, плюс прошлые записи
           Architect и Memory Extraction без стоимости). Остальные функции пока не отражаются в расходах.
         </p>

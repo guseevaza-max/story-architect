@@ -79,7 +79,7 @@ export default async function PlotLinesPage({
               </div>
 
               {line.premise && (
-                <p style={{ color: "#555", lineHeight: 1.6 }}>
+                <p style={{ color: "var(--text-2)", lineHeight: 1.6 }}>
                   {line.premise}
                 </p>
               )}
@@ -110,7 +110,7 @@ export default async function PlotLinesPage({
                 </p>
               )}
 
-              <p style={{ color: "#777", fontSize: 14 }}>
+              <p style={{ color: "var(--muted)", fontSize: 14 }}>
                 {line.lastProgressChapter !== null
                   ? `Последний прогресс: глава ${line.lastProgressChapter}`
                   : "Прогресса по линии пока не зафиксировано"}
@@ -124,7 +124,7 @@ export default async function PlotLinesPage({
                       <li key={stage.id}>
                         <strong>{stage.name}</strong>
                         {stage.description ? ` — ${stage.description}` : ""}
-                        <span style={{ color: "#777", fontSize: 14 }}>
+                        <span style={{ color: "var(--muted)", fontSize: 14 }}>
                           {stage.plannedChapter !== null
                             ? ` · план: глава ${stage.plannedChapter}`
                             : ""}

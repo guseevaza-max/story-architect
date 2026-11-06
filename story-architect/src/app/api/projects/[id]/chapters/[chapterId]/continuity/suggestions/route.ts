@@ -86,6 +86,8 @@ params: Promise<{
       await prisma.continuityReport.findFirst({
         where: {
           chapterId: chapter.id,
+          // отчёты проверки плана (level 0) относятся не к тексту
+          level: { gt: 0 },
         },
         orderBy: {
           createdAt: "desc",

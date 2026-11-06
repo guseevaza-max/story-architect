@@ -43,7 +43,7 @@ const fieldStyle = {
   width: "100%",
   padding: 10,
   borderRadius: 8,
-  border: "1px solid #ccc",
+  border: "1px solid var(--border)",
   fontSize: 14,
   boxSizing: "border-box",
   fontFamily: "inherit",
@@ -236,7 +236,7 @@ export default function AuthorIntentPanel({
 
   if (loadError) {
     return (
-      <div style={{ color: "#991b1b", lineHeight: 1.6 }}>
+      <div style={{ color: "var(--danger-text)", lineHeight: 1.6 }}>
         ⚠️ {loadError}{" "}
         <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
           Повторить
@@ -246,7 +246,7 @@ export default function AuthorIntentPanel({
   }
 
   if (!loaded) {
-    return <p style={{ color: "#666" }}>Загрузка авторского замысла…</p>;
+    return <p style={{ color: "var(--muted)" }}>Загрузка авторского замысла…</p>;
   }
 
   const select = (
@@ -292,7 +292,7 @@ export default function AuthorIntentPanel({
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <p style={{ margin: 0, color: "#666", lineHeight: 1.6, fontSize: 14 }}>
+      <p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.6, fontSize: 14 }}>
         Как вы хотите видеть эту главу. Замысел определяет художественное
         исполнение и не меняет Canon: утверждённые факты, характеры и планы
         остаются выше.
@@ -338,11 +338,11 @@ export default function AuthorIntentPanel({
         "Дополнительные указания по построению и концовке"
       )}
 
-      <fieldset style={{ border: "1px solid #ddd", borderRadius: 8, padding: 14 }}>
+      <fieldset style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 14 }}>
         <legend style={{ fontWeight: 600, fontSize: 14 }}>Референсы</legend>
 
         {activeReferences.length === 0 ? (
-          <p style={{ margin: 0, color: "#666", fontSize: 14 }}>
+          <p style={{ margin: 0, color: "var(--muted)", fontSize: 14 }}>
             В проекте пока нет активных референсов.{" "}
             <Link href={`/projects/${projectId}/references`}>
               Создать референс →
@@ -386,7 +386,7 @@ export default function AuthorIntentPanel({
                       onChange={() => toggleReference(reference.id)}
                     />{" "}
                     <strong>{reference.title}</strong>
-                    <span style={{ color: "#777" }}>
+                    <span style={{ color: "var(--muted)" }}>
                       {" "}
                       · {LABELS.category[reference.category]}
                     </span>
@@ -394,7 +394,7 @@ export default function AuthorIntentPanel({
                 ))}
 
                 {selected.length === 0 && (
-                  <span style={{ color: "#777", fontSize: 13 }}>
+                  <span style={{ color: "var(--muted)", fontSize: 13 }}>
                     Ничего не отмечено: референсы в этой главе не применяются.
                   </span>
                 )}
@@ -420,8 +420,8 @@ export default function AuthorIntentPanel({
             padding: "11px 18px",
             borderRadius: 8,
             border: "none",
-            background: saving ? "#777" : "#111",
-            color: "#fff",
+            background: saving ? "var(--surface-3)" : "var(--primary)",
+            color: "var(--on-primary)",
             fontWeight: 600,
             cursor: saving ? "default" : "pointer",
           }}
@@ -436,8 +436,8 @@ export default function AuthorIntentPanel({
           style={{
             padding: "11px 18px",
             borderRadius: 8,
-            border: "1px solid #ccc",
-            background: "#fff",
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
             cursor: saving ? "default" : "pointer",
           }}
         >
@@ -445,12 +445,12 @@ export default function AuthorIntentPanel({
         </button>
 
         {dirty && !saving && (
-          <span style={{ color: "#8a5a00", fontSize: 14 }}>
+          <span style={{ color: "var(--warn-text)", fontSize: 14 }}>
             Есть несохранённые изменения
           </span>
         )}
-        {message && <span style={{ color: "#26733a", fontSize: 14 }}>{message}</span>}
-        {error && <span style={{ color: "#991b1b", fontSize: 14 }}>⚠️ {error}</span>}
+        {message && <span style={{ color: "var(--ok-text)", fontSize: 14 }}>{message}</span>}
+        {error && <span style={{ color: "var(--danger-text)", fontSize: 14 }}>⚠️ {error}</span>}
       </div>
     </div>
   );

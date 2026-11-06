@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import ProjectSummaryView from "./_components/ProjectSummaryView";
+import { loadProjectSummary, type ProjectSummary } from "@/lib/ux/summary";
 
 const prisma = new PrismaClient();
 
@@ -29,34 +31,46 @@ export default async function ProjectPage({
     notFound();
   }
 
+  let summary: ProjectSummary | null = null;
+  try {
+    summary = await loadProjectSummary(prisma, session.user.id, project.id);
+  } catch (error) {
+    console.error("Project summary error:", error);
+  }
+
   return (
     <main
       style={{
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 30 }}>
-        <Link href="/dashboard">← Назад в Dashboard</Link>
+        <Link href="/dashboard">← Все проекты</Link>
       </div>
 
       <h1>{project.name}</h1>
 
-      <p style={{ color: "#666", fontSize: 18 }}>
-        Story Architect — рабочее пространство проекта
-      </p>
 
-      <section
+      <ProjectSummaryView projectId={project.id} summary={summary} />
+
+      <details
         style={{
           marginTop: 30,
-          padding: 24,
-          border: "1px solid #ddd",
+          padding: "14px 24px",
+          border: "1px solid var(--border)",
           borderRadius: 12,
         }}
       >
-        <h2>Информация о проекте</h2>
+        <summary style={{ cursor: "pointer", fontSize: 20, fontWeight: 600 }}>
+          Информация о проекте
+          <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 400, color: "var(--muted)" }}>
+            {project.name}
+            {project.genre ? ` · ${project.genre}` : ""} — нажмите, чтобы раскрыть
+          </span>
+        </summary>
 
         <p>
           <strong>Название:</strong> {project.name}
@@ -92,11 +106,19 @@ export default async function ProjectPage({
             {project.targetAudience}
           </p>
         )}
-      </section>
+      </details>
+
+      <details style={{ marginTop: 30, padding: "14px 24px", border: "1px solid var(--border)", borderRadius: 12 }}>
+        <summary style={{ cursor: "pointer", fontSize: 20, fontWeight: 600 }}>
+          Все разделы
+          <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 400, color: "var(--muted)" }}>
+            те же ссылки, что в верхней навигации — нажмите, чтобы раскрыть
+          </span>
+        </summary>
 
       <section
         style={{
-          marginTop: 30,
+          marginTop: 16,
           display: "grid",
           gridTemplateColumns:
             "repeat(auto-fit, minmax(220px, 1fr))",
@@ -109,11 +131,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>📚 Материалы мира</h2>
@@ -127,11 +149,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>📖 Canon</h2>
@@ -145,11 +167,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>🗺️ Сюжетная карта</h2>
@@ -163,11 +185,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>📄 Экспорт в PDF</h2>
@@ -181,11 +203,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>💰 Расходы ИИ</h2>
@@ -199,11 +221,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>📖 Story Bible</h2>
@@ -222,11 +244,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fafafa",
+            background: "var(--surface-2)",
           }}
         >
           <h2>🤖 Предложения AI</h2>
@@ -245,11 +267,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>👤 Characters</h2>
@@ -267,11 +289,11 @@ export default async function ProjectPage({
           style={{
             display: "block",
             padding: 24,
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textDecoration: "none",
             color: "inherit",
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2>🌍 World</h2>
@@ -290,16 +312,16 @@ export default async function ProjectPage({
             display: "block",
             textDecoration: "none",
             color: "inherit",
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 14,
             padding: 24,
-            background: "#fff",
+            background: "var(--surface)",
             transition: "0.2s",
           }}
         >
           <h2 style={{ marginTop: 0 }}>📚 Chapters</h2>
 
-          <p style={{ color: "#666", lineHeight: 1.6 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
             Главы, планы, сцены, черновики и финальный текст.
           </p>
 
@@ -313,10 +335,10 @@ export default async function ProjectPage({
             display: "block",
             textDecoration: "none",
             color: "inherit",
-            border: "1px solid #c9b7e8",
+            border: "1px solid var(--violet-border)",
             borderRadius: 14,
             padding: 24,
-            background: "#faf8ff",
+            background: "var(--violet-bg)",
             transition: "0.2s",
           }}
         >
@@ -324,7 +346,7 @@ export default async function ProjectPage({
 
           <p
             style={{
-              color: "#666",
+              color: "var(--muted)",
               lineHeight: 1.6,
             }}
           >
@@ -343,15 +365,15 @@ export default async function ProjectPage({
             display: "block",
             textDecoration: "none",
             color: "inherit",
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 14,
             padding: 24,
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2 style={{ marginTop: 0 }}>🤝 Relationships</h2>
 
-          <p style={{ color: "#666", lineHeight: 1.6 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
             Действующие отношения персонажей и история их изменений.
           </p>
 
@@ -365,15 +387,15 @@ export default async function ProjectPage({
             display: "block",
             textDecoration: "none",
             color: "inherit",
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 14,
             padding: 24,
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2 style={{ marginTop: 0 }}>🧵 Plot Lines</h2>
 
-          <p style={{ color: "#666", lineHeight: 1.6 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
             Сюжетные линии, их этапы и прогресс по главам.
           </p>
 
@@ -387,15 +409,15 @@ export default async function ProjectPage({
             display: "block",
             textDecoration: "none",
             color: "inherit",
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 14,
             padding: 24,
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2 style={{ marginTop: 0 }}>🕰️ Timeline</h2>
 
-          <p style={{ color: "#666", lineHeight: 1.6 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
             События истории в хронологическом порядке.
           </p>
 
@@ -409,21 +431,22 @@ export default async function ProjectPage({
             display: "block",
             textDecoration: "none",
             color: "inherit",
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 14,
             padding: 24,
-            background: "#fff",
+            background: "var(--surface)",
           }}
         >
           <h2 style={{ marginTop: 0 }}>🎨 Референсы</h2>
 
-          <p style={{ color: "#666", lineHeight: 1.6 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
             Библиотека художественных приёмов, которые применяются при работе над главами.
           </p>
 
           <strong>Открыть референсы →</strong>
         </Link>
       </section>
+      </details>
     </main>
   );
 }

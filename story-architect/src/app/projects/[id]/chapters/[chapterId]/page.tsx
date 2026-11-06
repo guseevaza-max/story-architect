@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { PrismaClient } from "@prisma/client";
 import { auth } from "@/auth";
+import { CHAPTER_STATUS_LABELS, loadChapterPage } from "@/lib/chapters/loadChapterPage";
+import { nextUnfinishedChapter, parseStage, recommend, stageHref, stageStates, type ChapterFacts, type StageKey } from "@/lib/ux/chapterWorkspace";
 
 import ArchitectButton from "./ArchitectButton";
 import SaveIdeaForm from "./SaveIdeaForm";
@@ -15,261 +16,244 @@ import DraftEditor from "./DraftEditor";
 import ApproveChapterButton from "./ApproveChapterButton";
 import CanonChapterButton from "./CanonChapterButton";
 import MemoryUpdateButton from "./MemoryUpdateButton";
+import ChapterWorkspace from "./ChapterWorkspace";
+import { ApprovedPlan, ApprovedScenes, EmptyNote, panelBox } from "./PlanViews";
 
-const prisma = new PrismaClient();
-
-type ChapterPlan = {
-  chapterPurpose?: string;
-  initialState?: string;
-  endState?: string;
-  plotDevelopment?: string[];
-  characterDevelopment?: string[];
-  mustHappen?: string[];
-  mustNotHappen?: string[];
-  openQuestions?: string[];
-  authorAnswers?: { question: string; answer: string }[];
-};
-
+/**
+ * Рабочее пространство главы: пять вкладок вместо одной длинной страницы.
+ * Все прежние компоненты используются как есть. Прежний вид доступен по
+ * адресу .../legacy. Ничего не запускается при открытии: платные действия
+ * только по кнопкам автора.
+ */
 export default async function ChapterPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; chapterId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
   const { id, chapterId } = await params;
+  const data = await loadChapterPage(session.user.id, id, chapterId);
+  if (!data) notFound();
 
-  const project = await prisma.project.findFirst({
-    where: { id, userId: session.user.id },
-    select: { id: true, name: true },
-  });
-
-  if (!project) notFound();
-
-  const chapter = await prisma.chapter.findFirst({
-    where: { id: chapterId, book: { projectId: project.id } },
-    include: {
-      book: true,
-      scenes: { orderBy: { order: "asc" } },
-    },
-  });
-
-  if (!chapter) notFound();
-
-  const statusLabels: Record<string, string> = {
-    IDEA: "Идея",
-    PLANNED: "Запланирована",
-    DRAFT: "Черновик",
-    EDITING: "Редактирование",
-    CHECKING: "Проверка",
-    APPROVED: "Утверждена",
-    CANON: "Canon",
-  };
-
-  const plan = chapter.plan as ChapterPlan | null;
-  const hasPlan = !!(
-    plan &&
-    (plan.chapterPurpose ||
-      plan.initialState ||
-      plan.endState ||
-      plan.plotDevelopment?.length ||
-      plan.characterDevelopment?.length ||
-      plan.mustHappen?.length ||
-      plan.mustNotHappen?.length ||
-      plan.openQuestions?.length)
-  );
-
-  const scenes = chapter.scenes as Array<{
-    id: string;
-    order: number;
-    title: string | null;
-    purpose: string | null;
-    plan: unknown;
-    plannedOutcome: string | null;
-    status: string;
-  }>;
-
+  const { project, chapter, plan, hasPlan, pending, siblings } = data;
+  const base = `/projects/${project.id}/chapters/${chapter.id}`;
+  const proposalsHref = `/projects/${project.id}/proposals`;
+  const scenes = chapter.scenes;
   const hasScenes = scenes.length > 0;
+  const hasDraft = !!chapter.draftText?.trim();
+  const status = chapter.status;
 
-  return (
-    <main style={{ maxWidth: 1000, margin: "40px auto", padding: "0 24px 60px", fontFamily: "Arial, sans-serif" }}>
-      <Link href={`/projects/${project.id}/chapters`} style={{ display: "inline-block", marginBottom: 20, color: "#555", textDecoration: "none" }}>
-        ← Назад к главам
-      </Link>
+  const facts: ChapterFacts = {
+    status,
+    hasIdea: !!chapter.authorIdea?.trim(),
+    hasIntent: chapter.authorIntent != null,
+    planApproved: chapter.planApproved,
+    sceneCount: scenes.length,
+    hasDraft,
+    pendingPlanProposals: pending.length,
+  };
+  const recommendation = recommend(facts);
+  const query = await searchParams;
+  const initialStage: StageKey = parseStage(query.tab) ?? parseStage(query.stage) ?? recommendation.stage;
+  const nextChapter = nextUnfinishedChapter(siblings, chapter.id);
 
-      <div style={{ fontSize: 13, color: "#777", marginBottom: 6 }}>
-        Книга {chapter.book.number} · Глава {chapter.number}
-      </div>
-
-      <h1 style={{ fontSize: 32, margin: "0 0 10px" }}>
-        {chapter.title || `Глава ${chapter.number}`}
-      </h1>
-
-      <div style={{ display: "inline-block", padding: "6px 12px", borderRadius: 999, background: chapter.status === "PLANNED" ? "#e8f5e9" : "#fff0bd", color: chapter.status === "PLANNED" ? "#287a35" : "#555", fontSize: 13, marginBottom: 28 }}>
-        {statusLabels[chapter.status] || chapter.status}
-      </div>
-
-      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Назначение главы</h2>
-        <p style={{ color: "#555", lineHeight: 1.6 }}>{chapter.purpose || "Назначение пока не задано."}</p>
-      </section>
-
-      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Идея автора</h2>
-        <SaveIdeaForm projectId={project.id} chapterId={chapter.id} initialIdea={chapter.authorIdea || ""} />
-      </section>
-
-      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <h2 style={{ marginTop: 0 }}>🎨 Авторский замысел</h2>
-        <AuthorIntentPanel projectId={project.id} chapterId={chapter.id} />
-      </section>
-
-      <NarrativeContextPanel projectId={project.id} chapterId={chapter.id} />
-
-      {hasPlan && (
-        <section style={{ border: "2px solid #d9c58b", borderRadius: 12, padding: 24, marginBottom: 16, background: "#fffdf5" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 20 }}>
-            <div>
-              <h2 style={{ margin: 0 }}>📋 Утверждённый план главы</h2>
-              <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14 }}>План сформирован Architect и утверждён автором.</p>
-            </div>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e8f5e9", color: "#287a35", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>✓ Утверждён</span>
-          </div>
-
-          {plan?.chapterPurpose && <div style={{ marginBottom: 22 }}><h3>Цель главы</h3><p style={{ lineHeight: 1.6 }}>{plan.chapterPurpose}</p></div>}
-          {plan?.initialState && <div style={{ marginBottom: 22 }}><h3>Начальное состояние</h3><p style={{ lineHeight: 1.6 }}>{plan.initialState}</p></div>}
-          {plan?.endState && <div style={{ marginBottom: 22 }}><h3>Конечное состояние</h3><p style={{ lineHeight: 1.6 }}>{plan.endState}</p></div>}
-
-          {plan?.plotDevelopment?.length ? <div style={{ marginBottom: 22 }}><h3>Развитие сюжета</h3><ul style={{ lineHeight: 1.6 }}>{plan.plotDevelopment.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
-          {plan?.characterDevelopment?.length ? <div style={{ marginBottom: 22 }}><h3>Развитие персонажей</h3><ul style={{ lineHeight: 1.6 }}>{plan.characterDevelopment.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
-          {plan?.mustHappen?.length ? <div style={{ marginBottom: 22 }}><h3>Обязательно должно произойти</h3><ul style={{ lineHeight: 1.6 }}>{plan.mustHappen.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
-          {plan?.mustNotHappen?.length ? <div style={{ marginBottom: 22 }}><h3>Не должно произойти</h3><ul style={{ lineHeight: 1.6 }}>{plan.mustNotHappen.map((item, index) => <li key={index}>{item}</li>)}</ul></div> : null}
-          {plan?.openQuestions?.length ? <div style={{ marginBottom: 22 }}><h3>Открытые вопросы</h3><ul style={{ lineHeight: 1.6 }}>{plan.openQuestions.map((item, index) => { const answer = plan.authorAnswers?.find((a) => a.question === item)?.answer; return <li key={index}>{item}{answer ? <div style={{ marginTop: 6, padding: 10, borderRadius: 8, background: "#eef7ee", border: "1px solid #c9e4c9" }}><strong>Ответ автора:</strong> {answer}</div> : null}</li>; })}</ul></div> : null}
-
-          <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #ddd" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>🎬 Следующий этап — план сцен</h3>
-            <p style={{ color: "#666", lineHeight: 1.5, marginBottom: 16 }}>Scene Planner разбивает утверждённый план главы на последовательность сцен.</p>
-            <ScenePlannerButton projectId={project.id} chapterId={chapter.id} />
-          </div>
+  const panels: Record<StageKey, React.ReactNode> = {
+    // ───────────── 1. Замысел ─────────────
+    intent: (
+      <>
+        <section style={panelBox}>
+          <h2 style={{ marginTop: 0 }}>Назначение главы</h2>
+          <p style={{ color: "var(--text-2)", lineHeight: 1.6 }}>{chapter.purpose || "Назначение пока не задано."}</p>
         </section>
-      )}
-
-      {hasScenes && (
-        <section style={{ border: "2px solid #c9b7e8", borderRadius: 12, padding: 24, marginBottom: 16, background: "#faf8ff" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 8 }}>
-            <div>
-              <h2 style={{ margin: 0 }}>🎬 Утверждённый план сцен</h2>
-              <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14 }}>Scene Planner сформировал сцены, и автор утвердил этот план.</p>
-            </div>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e8f5e9", color: "#287a35", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>
-              ✓ {scenes.length} {scenes.length === 1 ? "сцена" : scenes.length < 5 ? "сцены" : "сцен"}
-            </span>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20 }}>
-            {scenes.map((scene) => {
-              const scenePlan = Array.isArray(scene.plan) ? scene.plan.filter((item): item is string => typeof item === "string") : [];
-              return (
-                <article key={scene.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, background: "#fff" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, color: "#777" }}>Сцена {scene.order}</div>
-                    <span style={{ padding: "5px 9px", borderRadius: 999, background: "#f1f5f9", color: "#555", fontSize: 11, fontWeight: 600 }}>{scene.status}</span>
-                  </div>
-                  <h3 style={{ margin: "0 0 18px", fontSize: 20 }}>{scene.title || `Сцена ${scene.order}`}</h3>
-                  {scene.purpose && <div style={{ marginBottom: 18 }}><strong>Цель сцены</strong><p style={{ margin: "8px 0 0", color: "#555", lineHeight: 1.6 }}>{scene.purpose}</p></div>}
-                  {scenePlan.length > 0 && <div style={{ marginBottom: 18 }}><strong>План действий</strong><ul style={{ marginTop: 8, lineHeight: 1.6 }}>{scenePlan.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
-                  {scene.plannedOutcome && <div><strong>Ожидаемый результат</strong><p style={{ margin: "8px 0 0", color: "#555", lineHeight: 1.6 }}>{scene.plannedOutcome}</p></div>}
-                </article>
-              );
-            })}
-          </div>
-
-          {/* =================================================
-              PRE-WRITER CONTINUITY CHECK
-              ================================================= */}
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #ddd" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>🔎 Сопоставление с Canon</h3>
-            <p style={{ margin: "0 0 16px", color: "#666", lineHeight: 1.5 }}>
-              Перед написанием главы AI проверяет утверждённую раскадровку на противоречия с Canon, предыдущими событиями, персонажами, правилами мира и логикой истории.
-            </p>
-            <ContinuityButton projectId={project.id} chapterId={chapter.id} />
-            <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "#f1f5f9", fontSize: 13, color: "#555" }}>
-              💡 Сначала устрани или прими найденные противоречия, затем запускай Writer.
-            </div>
-          </div>
-
-          {/* =================================================
-              WRITER
-              ================================================= */}
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #ddd" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>✍️ Следующий этап — Writer</h3>
-            <p style={{ margin: 0, color: "#666", lineHeight: 1.5 }}>
-              После проверки раскадровки Writer создаёт черновик главы на основе утверждённой структуры.
-            </p>
-            <div style={{ marginTop: 16 }}>
-              <WriterButton projectId={project.id} chapterId={chapter.id} />
-            </div>
-          </div>
+        <section style={panelBox}>
+          <h2 style={{ marginTop: 0 }}>Идея автора</h2>
+          <SaveIdeaForm projectId={project.id} chapterId={chapter.id} initialIdea={chapter.authorIdea || ""} />
         </section>
-      )}
+        <section style={panelBox}>
+          <h2 style={{ marginTop: 0 }}>🎨 Авторский замысел</h2>
+          <AuthorIntentPanel projectId={project.id} chapterId={chapter.id} />
+        </section>
+        <NarrativeContextPanel projectId={project.id} chapterId={chapter.id} />
+      </>
+    ),
 
-      {(
-        <section style={{ border: "2px solid #9bb7d4", borderRadius: 12, padding: 24, marginBottom: 16, background: "#f8fbff" }}>
-          <div style={{ marginBottom: 20 }}>
-            <h2 style={{ margin: 0 }}>📖 Редактор черновика</h2>
-            <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14, lineHeight: 1.5 }}>Здесь можно отредактировать текст главы. Изменения пока остаются в черновике и не изменяют Canon.</p>
-          </div>
+    // ───────────── 2. Планирование ─────────────
+    planning: (
+      <>
+        {pending.length > 0 && (
+          <section style={{ ...panelBox, background: "var(--warn-bg)", borderColor: "var(--warn-border)" }}>
+            <strong>Ждут вашего решения: {pending.length}</strong>
+            <p style={{ margin: "6px 0 10px", color: "var(--warn-text)" }}>
+              {pending.some((p) => p.entityType === "chapter_plan") ? "План главы" : ""}
+              {pending.some((p) => p.entityType === "chapter_plan") && pending.some((p) => p.entityType === "scene_plan") ? " и " : ""}
+              {pending.some((p) => p.entityType === "scene_plan") ? "план сцен" : ""} утверждается в Центре решений. Автоматически ничего не принимается.
+            </p>
+            <Link href={proposalsHref} style={{ fontWeight: 600 }}>
+              Открыть Центр решений →
+            </Link>
+          </section>
+        )}
+
+        <section style={panelBox}>
+          <h2 style={{ marginTop: 0 }}>Architect</h2>
+          <p style={{ color: "var(--text-2)" }}>Architect анализирует идею автора и формирует структурированный план главы. Он создаёт предложение, которое вы проверяете и утверждаете.</p>
+          <ArchitectButton projectId={project.id} chapterId={chapter.id} />
+        </section>
+
+        {hasPlan && plan ? (
+          <>
+            <ApprovedPlan plan={plan} />
+            <section style={panelBox}>
+              <h2 style={{ marginTop: 0 }}>🎬 Scene Planner</h2>
+              <p style={{ color: "var(--muted)", lineHeight: 1.5 }}>Разбивает утверждённый план главы на последовательность сцен.</p>
+              <ScenePlannerButton projectId={project.id} chapterId={chapter.id} />
+            </section>
+          </>
+        ) : (
+          <EmptyNote
+            title="Утверждённого плана главы пока нет"
+            action={pending.length > 0 ? { href: proposalsHref, label: "Открыть Центр решений →" } : undefined}
+          >
+            Запустите Architect и утвердите предложение в Центре решений: после этого здесь появятся план и Scene Planner. Планирование необязательно: текст можно писать и без плана.
+          </EmptyNote>
+        )}
+
+        {hasScenes ? (
+          <ApprovedScenes scenes={scenes} />
+        ) : hasPlan ? (
+          <EmptyNote title="Плана сцен пока нет">Запустите Scene Planner выше и утвердите предложение.</EmptyNote>
+        ) : null}
+
+        {hasPlan || hasScenes ? (
+          <section style={{ ...panelBox, border: "2px solid var(--info-border)", background: "var(--info-bg)" }}>
+            <h2 style={{ marginTop: 0 }}>🔎 Проверка плана и сцен до написания</h2>
+            <p style={{ color: "var(--muted)", lineHeight: 1.5, marginBottom: 16 }}>
+              Сверяет план с Canon, состоянием истории и сюжетной картой, проверяет покрытие плана сценами и ограничения на раскрытие тайн. Текст главы не нужен. Это платный запрос ИИ, он запускается только по вашей кнопке. Canon и статус главы не меняются.
+            </p>
+            <ContinuityButton projectId={project.id} chapterId={chapter.id} mode="plan" />
+          </section>
+        ) : (
+          <EmptyNote title="Проверка плана и сцен до написания">Станет доступна, когда появится утверждённый план главы или план сцен.</EmptyNote>
+        )}
+      </>
+    ),
+
+    // ───────────── 3. Черновик ─────────────
+    draft: (
+      <>
+        {hasScenes ? (
+          <section style={panelBox}>
+            <h2 style={{ marginTop: 0 }}>✍️ Writer</h2>
+            <p style={{ margin: "0 0 12px", color: "var(--muted)", lineHeight: 1.5 }}>Создаёт черновик главы по утверждённым плану и сценам. Запускается только по кнопке.</p>
+            <WriterButton projectId={project.id} chapterId={chapter.id} />
+          </section>
+        ) : (
+          <EmptyNote title="Writer пока недоступен" action={{ href: stageHref(base, "planning"), label: "Перейти к планированию →" }}>
+            Writer работает по утверждённым плану и сценам (этап «Планирование»). Текст можно написать вручную в редакторе ниже.
+          </EmptyNote>
+        )}
+        <section style={{ ...panelBox, border: "2px solid var(--info-border)", background: "var(--info-bg)" }}>
+          <h2 style={{ margin: 0 }}>📖 Редактор черновика</h2>
+          <p style={{ margin: "6px 0 16px", color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>Изменения остаются в черновике и не меняют Canon. Сохранение вручную; при переключении вкладок текст не теряется.</p>
           <DraftEditor projectId={project.id} chapterId={chapter.id} initialText={chapter.draftText ?? ""} />
         </section>
-      )}
+      </>
+    ),
 
-      {/* =====================================================
-          DRAFT CONTINUITY CHECK
-          ===================================================== */}
-      {chapter.draftText && (
-        <section style={{ border: "2px solid #b7c9d8", borderRadius: 12, padding: 24, marginBottom: 16, background: "#f8fbff" }}>
-          <div style={{ marginBottom: 18 }}>
-            <h2 style={{ margin: 0 }}>🔎 Проверка непрерывности</h2>
-            <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14, lineHeight: 1.5 }}>AI проверяет текущий черновик на противоречия с планом, сценами и внутренней логикой истории.</p>
-          </div>
+    // ───────────── 4. Анализ ─────────────
+    analysis: hasDraft ? (
+      <>
+        <section style={{ ...panelBox, border: "2px solid var(--info-border)", background: "var(--info-bg)" }}>
+          <h2 style={{ margin: 0 }}>🔎 Проверка непрерывности</h2>
+          <p style={{ margin: "6px 0 16px", color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>AI проверяет написанный черновик на противоречия с планом, сценами и Canon. Запускается только по кнопке и стоит денег.</p>
           <ContinuityButton projectId={project.id} chapterId={chapter.id} />
           <ContinuitySuggestionsButton projectId={project.id} chapterId={chapter.id} />
         </section>
-      )}
+        <EmptyNote title="Редакторский разбор">
+          Сценарного критика можно запустить в панели «💬 Соавтор» (режим «Сценарный критик»): он оценивает ремесло главы и ничего не меняет.
+        </EmptyNote>
+      </>
+    ) : (
+      <EmptyNote title="Анализировать пока нечего" action={{ href: stageHref(base, "draft"), label: "Перейти к черновику →" }}>
+        Проверка непрерывности работает с текстом. Напишите или сгенерируйте черновик на этапе «Черновик».
+      </EmptyNote>
+    ),
 
-      {chapter.draftText && chapter.status !== "APPROVED" && chapter.status !== "CANON" && (
-        <section style={{ border: "2px solid #9bc7a5", borderRadius: 12, padding: 24, marginBottom: 16, background: "#f7fff8" }}>
-          <h2 style={{ marginTop: 0 }}>✓ Финальное утверждение</h2>
-          <p style={{ color: "#666", lineHeight: 1.5, marginBottom: 16 }}>Если текст главы готов и необходимые исправления внесены, автор может утвердить главу. Это пока не изменяет Canon.</p>
-          <ApproveChapterButton projectId={project.id} chapterId={chapter.id} />
-        </section>
-      )}
+    // ───────────── 5. Завершение ─────────────
+    finish: (
+      <>
+        {hasDraft && status !== "APPROVED" && status !== "CANON" ? (
+          <section style={{ ...panelBox, border: "2px solid var(--ok-border)", background: "var(--ok-bg)" }}>
+            <h2 style={{ marginTop: 0 }}>✓ Финальное утверждение</h2>
+            <p style={{ color: "var(--muted)", lineHeight: 1.5, marginBottom: 16 }}>Если текст готов, автор может утвердить главу. Это пока не меняет Canon.</p>
+            <ApproveChapterButton projectId={project.id} chapterId={chapter.id} />
+          </section>
+        ) : status === "APPROVED" || status === "CANON" ? (
+          <EmptyNote title="✓ Глава утверждена">Правка текста вернёт главу к утверждению.</EmptyNote>
+        ) : (
+          <EmptyNote title="Утверждение пока недоступно" action={{ href: stageHref(base, "draft"), label: "Перейти к черновику →" }}>
+            Нужен текст черновика.
+          </EmptyNote>
+        )}
 
-      {chapter.status === "APPROVED" && (
-        <section style={{ border: "2px solid #c9b7e8", borderRadius: 12, padding: 24, marginBottom: 16, background: "#faf8ff" }}>
-          <h2 style={{ marginTop: 0 }}>📚 Canon</h2>
-          <p style={{ color: "#666", lineHeight: 1.5, marginBottom: 16 }}>Глава утверждена автором. Теперь её можно добавить в Canon — подтверждённую историю книги.</p>
-          <CanonChapterButton projectId={project.id} chapterId={chapter.id} />
-        </section>
-      )}
+        {status === "APPROVED" ? (
+          <section style={{ ...panelBox, border: "2px solid var(--violet-border)", background: "var(--violet-bg)" }}>
+            <h2 style={{ marginTop: 0 }}>📚 Canon</h2>
+            <p style={{ color: "var(--muted)", lineHeight: 1.5, marginBottom: 16 }}>Глава утверждена. Теперь её можно добавить в Canon.</p>
+            <CanonChapterButton projectId={project.id} chapterId={chapter.id} />
+          </section>
+        ) : status === "CANON" ? (
+          <EmptyNote title="📚 Глава в Canon">Подтверждённая история книги.</EmptyNote>
+        ) : (
+          <EmptyNote title="Перевод в Canon">Станет доступен после утверждения главы.</EmptyNote>
+        )}
 
-      {chapter.status === "CANON" && (
-        <section style={{ border: "2px solid #93c5fd", borderRadius: 12, padding: 24, marginBottom: 16, background: "#eff6ff" }}>
-          <h2 style={{ marginTop: 0 }}>🧠 Memory Update</h2>
-          <p style={{ color: "#666", lineHeight: 1.5, marginBottom: 16 }}>Глава уже находится в Canon. Теперь AI может извлечь из неё важные изменения для памяти истории.</p>
-          <MemoryUpdateButton projectId={project.id} chapterId={chapter.id} />
-        </section>
-      )}
+        {status === "CANON" ? (
+          <section style={{ ...panelBox, border: "2px solid var(--info-border)", background: "var(--info-bg)" }}>
+            <h2 style={{ marginTop: 0 }}>🧠 Memory Update</h2>
+            <p style={{ color: "var(--muted)", lineHeight: 1.5, marginBottom: 16 }}>Глава в Canon. AI может извлечь из неё важные изменения для памяти истории; каждое утверждает автор.</p>
+            <MemoryUpdateButton projectId={project.id} chapterId={chapter.id} />
+          </section>
+        ) : (
+          <EmptyNote title="🧠 Memory Update">Доступно после перевода главы в Canon.</EmptyNote>
+        )}
 
-      <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Architect</h2>
-        <p style={{ color: "#555" }}>Architect анализирует текущую идею автора и формирует структурированный план главы.</p>
-        <ArchitectButton projectId={project.id} chapterId={chapter.id} />
-        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "#f1f5f9", fontSize: 13, color: "#555" }}>
-          💡 Architect не изменяет Canon автоматически. Он создаёт предложение, которое автор должен проверить и утвердить.
-        </div>
-      </section>
-    </main>
+        {status === "CANON" && nextChapter ? (
+          <section style={{ ...panelBox, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <h2 style={{ margin: "0 0 4px" }}>Следующая глава</h2>
+              <div style={{ color: "var(--text-2)" }}>
+                Книга {nextChapter.bookNumber} · глава {nextChapter.number}
+                {nextChapter.title ? ` «${nextChapter.title}»` : ""}
+              </div>
+            </div>
+            <Link href={`/projects/${project.id}/chapters/${nextChapter.id}`} className="sa-btn sa-btn-primary">
+              Перейти к главе →
+            </Link>
+          </section>
+        ) : null}
+      </>
+    ),
+  };
+
+  return (
+    <ChapterWorkspace
+      initialStage={initialStage}
+      basePath={base}
+      legacyHref={`${base}/legacy`}
+      backHref={`/projects/${project.id}/chapters`}
+      title={chapter.title || `Глава ${chapter.number}`}
+      bookChapter={`Книга ${chapter.book.number} · Глава ${chapter.number}`}
+      status={status}
+      statusLabel={CHAPTER_STATUS_LABELS[status] || status}
+      states={stageStates(facts)}
+      recommendation={recommendation}
+      panels={panels}
+    />
   );
 }
+

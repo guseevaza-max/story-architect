@@ -25,7 +25,7 @@ export function PageShell({
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 30 }}>
@@ -43,14 +43,14 @@ export function PageShell({
       >
         <div>
           <h1 style={{ margin: "0 0 8px" }}>{title}</h1>
-          <p style={{ margin: 0, color: "#666", fontSize: 18 }}>{subtitle}</p>
+          <p style={{ margin: 0, color: "var(--muted)", fontSize: 18 }}>{subtitle}</p>
         </div>
 
         <div
           style={{
             padding: "10px 16px",
             borderRadius: 20,
-            background: "#f3f4f6",
+            background: "var(--surface-2)",
             fontWeight: 600,
             whiteSpace: "nowrap",
           }}
@@ -81,14 +81,14 @@ export function EmptyState({
     <section
       style={{
         padding: 50,
-        border: "1px solid #ddd",
+        border: "1px solid var(--border)",
         borderRadius: 12,
         textAlign: "center",
       }}
     >
       <div style={{ fontSize: 48, marginBottom: 15 }}>{icon}</div>
       <h2>{title}</h2>
-      <p style={{ color: "#666" }}>{text}</p>
+      <p style={{ color: "var(--muted)" }}>{text}</p>
       <Link
         href={href}
         style={{
@@ -96,8 +96,8 @@ export function EmptyState({
           marginTop: 16,
           padding: "12px 20px",
           borderRadius: 8,
-          background: "#111",
-          color: "#fff",
+          background: "var(--primary)",
+          color: "var(--on-primary)",
           textDecoration: "none",
         }}
       >
@@ -108,10 +108,10 @@ export function EmptyState({
 }
 
 const TONES = {
-  green: { background: "#e8f5e9", color: "#26733a" },
-  gray: { background: "#f3f4f6", color: "#555" },
-  amber: { background: "#fff4e0", color: "#8a5a00" },
-  blue: { background: "#e8f0fe", color: "#1a56b0" },
+  green: { background: "var(--ok-bg)", color: "var(--ok-text)" },
+  gray: { background: "var(--surface-2)", color: "var(--text-2)" },
+  amber: { background: "var(--warn-bg)", color: "var(--warn-text)" },
+  blue: { background: "var(--info-bg)", color: "var(--info-text)" },
 } as const;
 
 export function Pill({
@@ -141,8 +141,8 @@ export function Pill({
 }
 
 export const cardStyle = {
-  border: "1px solid #ddd",
+  border: "1px solid var(--border)",
   borderRadius: 12,
   padding: 24,
-  background: "#fff",
+  background: "var(--surface)",
 } as const;

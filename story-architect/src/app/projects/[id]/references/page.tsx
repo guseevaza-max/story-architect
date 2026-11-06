@@ -65,7 +65,7 @@ const field = {
   width: "100%",
   padding: 10,
   borderRadius: 8,
-  border: "1px solid #ccc",
+  border: "1px solid var(--border)",
   fontSize: 14,
   boxSizing: "border-box",
   fontFamily: "inherit",
@@ -248,7 +248,7 @@ export default function ReferencesPage() {
         maxWidth: 900,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 24 }}>
@@ -256,7 +256,7 @@ export default function ReferencesPage() {
       </div>
 
       <h1 style={{ marginBottom: 8 }}>Референсы</h1>
-      <p style={{ color: "#666", lineHeight: 1.6, marginTop: 0 }}>
+      <p style={{ color: "var(--muted)", lineHeight: 1.6, marginTop: 0 }}>
         Конкретные художественные приёмы, которые вы хотите применять: темп,
         атмосфера, диалоги, развитие героя, драматургия. Опишите сам приём, а
         не просто имя автора. Референсы влияют на исполнение главы, но не
@@ -264,7 +264,7 @@ export default function ReferencesPage() {
       </p>
 
       {loadError && (
-        <div style={{ color: "#991b1b", marginBottom: 16 }}>
+        <div style={{ color: "var(--danger-text)", marginBottom: 16 }}>
           ⚠️ {loadError}{" "}
           <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
             Повторить
@@ -272,7 +272,7 @@ export default function ReferencesPage() {
         </div>
       )}
 
-      {!loaded && !loadError && <p style={{ color: "#666" }}>Загрузка…</p>}
+      {!loaded && !loadError && <p style={{ color: "var(--muted)" }}>Загрузка…</p>}
 
       {loaded && !draft && (
         <button
@@ -286,8 +286,8 @@ export default function ReferencesPage() {
             padding: "11px 18px",
             borderRadius: 8,
             border: "none",
-            background: "#111",
-            color: "#fff",
+            background: "var(--primary)",
+            color: "var(--on-primary)",
             fontWeight: 600,
             cursor: "pointer",
             marginBottom: 20,
@@ -300,11 +300,11 @@ export default function ReferencesPage() {
       {draft && (
         <section
           style={{
-            border: "2px solid #d9c58b",
+            border: "2px solid var(--warn-border)",
             borderRadius: 12,
             padding: 20,
             marginBottom: 24,
-            background: "#fffdf5",
+            background: "var(--warn-bg)",
             display: "grid",
             gap: 14,
           }}
@@ -363,9 +363,9 @@ export default function ReferencesPage() {
             </select>
           </label>
 
-          <section style={{ display: "grid", gap: 12, padding: 14, border: "1px solid #ddd", borderRadius: 8 }}>
+          <section style={{ display: "grid", gap: 12, padding: 14, border: "1px solid var(--border)", borderRadius: 8 }}>
             <h3 style={{ margin: 0 }}>Характеристики художественного подхода</h3>
-            <p style={{ margin: 0, color: "#666", fontSize: 13, lineHeight: 1.5 }}>
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
               Заполняйте только нужные поля. Описывайте принципы и эффекты,
               а не просите ИИ дословно копировать чужую манеру.
             </p>
@@ -447,8 +447,8 @@ export default function ReferencesPage() {
                 padding: "11px 18px",
                 borderRadius: 8,
                 border: "none",
-                background: saving ? "#777" : "#111",
-                color: "#fff",
+                background: saving ? "var(--surface-3)" : "var(--primary)",
+                color: "var(--on-primary)",
                 fontWeight: 600,
                 cursor: saving ? "default" : "pointer",
               }}
@@ -466,8 +466,8 @@ export default function ReferencesPage() {
               style={{
                 padding: "11px 18px",
                 borderRadius: 8,
-                border: "1px solid #ccc",
-                background: "#fff",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
                 cursor: "pointer",
               }}
             >
@@ -477,11 +477,11 @@ export default function ReferencesPage() {
         </section>
       )}
 
-      {message && <p style={{ color: "#26733a" }}>{message}</p>}
-      {error && <p style={{ color: "#991b1b" }}>⚠️ {error}</p>}
+      {message && <p style={{ color: "var(--ok-text)" }}>{message}</p>}
+      {error && <p style={{ color: "var(--danger-text)" }}>⚠️ {error}</p>}
 
       {loaded && references.length === 0 && !draft && (
-        <p style={{ color: "#666" }}>
+        <p style={{ color: "var(--muted)" }}>
           Референсов пока нет. Добавьте первый, например «Контраст спокойных
           сцен и резких кульминаций».
         </p>
@@ -492,10 +492,10 @@ export default function ReferencesPage() {
           <article
             key={reference.id}
             style={{
-              border: "1px solid #ddd",
+              border: "1px solid var(--border)",
               borderRadius: 12,
               padding: 18,
-              background: "#fff",
+              background: "var(--surface)",
               opacity: reference.active ? 1 : 0.6,
             }}
           >
@@ -509,7 +509,7 @@ export default function ReferencesPage() {
             >
               <h3 style={{ margin: 0 }}>{reference.title}</h3>
 
-              <span style={{ fontSize: 12, color: "#555", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: 12, color: "var(--text-2)", whiteSpace: "nowrap" }}>
                 {{
                   WRITER_PROFILE: "Профиль писателя",
                   WORK_PROFILE: "Профиль произведения",
@@ -523,7 +523,7 @@ export default function ReferencesPage() {
             </div>
 
             {reference.source && (
-              <p style={{ margin: "6px 0 0", color: "#777", fontSize: 14 }}>
+              <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: 14 }}>
                 Источник: {reference.source}
               </p>
             )}
@@ -577,7 +577,7 @@ export default function ReferencesPage() {
                 type="button"
                 onClick={() => void remove(reference)}
                 disabled={saving}
-                style={{ color: "#991b1b" }}
+                style={{ color: "var(--danger-text)" }}
               >
                 Удалить
               </button>

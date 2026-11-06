@@ -71,7 +71,7 @@ export default async function TimelinePage({
           linkLabel="Открыть предложения AI"
         />
       ) : (
-        <div style={{ borderLeft: "3px solid #ddd", paddingLeft: 24 }}>
+        <div style={{ borderLeft: "3px solid var(--border)", paddingLeft: 24 }}>
           {events.map((event) => (
             <article
               key={event.id}
@@ -100,7 +100,7 @@ export default async function TimelinePage({
               </div>
 
               {event.description && (
-                <p style={{ color: "#555", lineHeight: 1.6 }}>
+                <p style={{ color: "var(--text-2)", lineHeight: 1.6 }}>
                   {event.description}
                 </p>
               )}
@@ -118,7 +118,7 @@ export default async function TimelinePage({
               )}
 
               {event.effectLinks.length > 0 && (
-                <p style={{ color: "#777", fontSize: 14, marginBottom: 0 }}>
+                <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 0 }}>
                   Привело к:{" "}
                   {event.effectLinks
                     .map((link) => link.effectEvent.name)

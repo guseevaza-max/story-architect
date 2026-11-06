@@ -273,7 +273,7 @@ export default function ProposalsPage() {
                     "10px 12px",
                   borderRadius: 8,
                   background:
-                    "#f8f8f8",
+                    "var(--surface-2)",
                   lineHeight: 1.5,
                 }}
               >
@@ -299,14 +299,14 @@ export default function ProposalsPage() {
             padding: 18,
             borderRadius: 10,
             background:
-              "#f7f7f7",
+              "var(--surface-2)",
             marginBottom: 20,
           }}
         >
           <div
             style={{
               fontSize: 13,
-              color: "#666",
+              color: "var(--muted)",
               marginBottom: 8,
             }}
           >
@@ -326,7 +326,7 @@ export default function ProposalsPage() {
             style={{
               margin:
                 "8px 0 0",
-              color: "#666",
+              color: "var(--muted)",
             }}
           >
             AI подготовил структуру
@@ -341,7 +341,7 @@ export default function ProposalsPage() {
               padding: 18,
               borderRadius: 10,
               background:
-                "#eef6ff",
+                "var(--info-bg)",
               marginBottom: 16,
             }}
           >
@@ -380,7 +380,7 @@ export default function ProposalsPage() {
               style={{
                 padding: 18,
                 border:
-                  "1px solid #e5e5e5",
+                  "1px solid var(--border-soft)",
                 borderRadius: 10,
               }}
             >
@@ -410,7 +410,7 @@ export default function ProposalsPage() {
               style={{
                 padding: 18,
                 border:
-                  "1px solid #e5e5e5",
+                  "1px solid var(--border-soft)",
                 borderRadius: 10,
               }}
             >
@@ -463,7 +463,7 @@ export default function ProposalsPage() {
         {plan.openQuestions && plan.openQuestions.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <h3 style={{ margin: "0 0 6px" }}>❓ Открытые вопросы</h3>
-            <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
+            <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: 13 }}>
               Можно ответить на любой вопрос. Ответ сохранится вместе с планом и
               будет учтён при планировании сцен и написании. Пустые вопросы
               остаются открытыми.
@@ -476,7 +476,7 @@ export default function ProposalsPage() {
                   marginBottom: 12,
                   padding: 14,
                   borderRadius: 10,
-                  background: "#f8f8f8",
+                  background: "var(--surface-2)",
                 }}
               >
                 <div style={{ lineHeight: 1.6 }}>{question}</div>
@@ -493,7 +493,7 @@ export default function ProposalsPage() {
                     marginTop: 10,
                     padding: 10,
                     boxSizing: "border-box",
-                    border: "1px solid #ccc",
+                    border: "1px solid var(--border)",
                     borderRadius: 8,
                     fontFamily: "inherit",
                     fontSize: 14,
@@ -534,16 +534,16 @@ export default function ProposalsPage() {
             padding: 18,
             borderRadius: 10,
             background:
-              "#faf8ff",
+              "var(--violet-bg)",
             border:
-              "1px solid #ddd4f0",
+              "1px solid var(--violet-border)",
             marginBottom: 20,
           }}
         >
           <div
             style={{
               fontSize: 13,
-              color: "#777",
+              color: "var(--muted)",
               marginBottom: 8,
             }}
           >
@@ -564,7 +564,7 @@ export default function ProposalsPage() {
             style={{
               margin:
                 "8px 0 0",
-              color: "#666",
+              color: "var(--muted)",
               lineHeight: 1.5,
             }}
           >
@@ -582,8 +582,8 @@ export default function ProposalsPage() {
               padding: 18,
               borderRadius: 10,
               background:
-                "#fff7ed",
-              color: "#7c4a03",
+                "var(--warn-bg)",
+              color: "var(--warn-text)",
             }}
           >
             ⚠️ В Proposal не
@@ -615,11 +615,11 @@ export default function ProposalsPage() {
                     key={`${scene.order}-${index}`}
                     style={{
                       border:
-                        "1px solid #ddd",
+                        "1px solid var(--border)",
                       borderRadius: 12,
                       padding: 20,
                       background:
-                        "#fff",
+                        "var(--surface)",
                     }}
                   >
                     <div
@@ -639,7 +639,7 @@ export default function ProposalsPage() {
                         style={{
                           fontSize: 13,
                           color:
-                            "#777",
+                            "var(--muted)",
                         }}
                       >
                         Сцена{" "}
@@ -655,9 +655,9 @@ export default function ProposalsPage() {
                           borderRadius:
                             999,
                           background:
-                            "#f1f5f9",
+                            "var(--info-bg)",
                           color:
-                            "#555",
+                            "var(--text-2)",
                           fontSize: 11,
                           fontWeight:
                             600,
@@ -695,7 +695,7 @@ export default function ProposalsPage() {
                             margin:
                               "8px 0 0",
                             color:
-                              "#555",
+                              "var(--text-2)",
                             lineHeight:
                               1.6,
                           }}
@@ -754,7 +754,7 @@ export default function ProposalsPage() {
                           borderRadius:
                             8,
                           background:
-                            "#f8fafc",
+                            "var(--info-bg)",
                         }}
                       >
                         <strong>
@@ -767,7 +767,7 @@ export default function ProposalsPage() {
                             margin:
                               "8px 0 0",
                             color:
-                              "#555",
+                              "var(--text-2)",
                             lineHeight:
                               1.6,
                           }}
@@ -793,9 +793,9 @@ export default function ProposalsPage() {
               padding: 18,
               borderRadius: 10,
               background:
-                "#fff7ed",
+                "var(--warn-bg)",
               border:
-                "1px solid #fed7aa",
+                "1px solid var(--warn-border)",
             }}
           >
             <h3
@@ -877,7 +877,7 @@ export default function ProposalsPage() {
 
           <p
             style={{
-              color: "#666",
+              color: "var(--muted)",
               margin: 0,
             }}
           >
@@ -895,7 +895,7 @@ export default function ProposalsPage() {
               "10px 16px",
             borderRadius: 20,
             background:
-              "#f3f4f6",
+              "var(--surface-2)",
             fontWeight: 600,
           }}
         >
@@ -912,10 +912,10 @@ export default function ProposalsPage() {
             marginBottom: 20,
             padding: 16,
             border:
-              "1px solid #cc0000",
+              "1px solid var(--danger-border)",
             borderRadius: 8,
             background:
-              "#fff5f5",
+              "var(--danger-bg)",
           }}
         >
           <strong>
@@ -936,7 +936,7 @@ export default function ProposalsPage() {
           style={{
             padding: 40,
             border:
-              "1px solid #ddd",
+              "1px solid var(--border)",
             borderRadius: 12,
             textAlign:
               "center",
@@ -948,7 +948,7 @@ export default function ProposalsPage() {
 
           <p
             style={{
-              color: "#666",
+              color: "var(--muted)",
             }}
           >
             Запустите AI-анализ
@@ -966,8 +966,8 @@ export default function ProposalsPage() {
                 "12px 20px",
               borderRadius: 8,
               background:
-                "#111",
-              color: "#fff",
+                "var(--primary)",
+              color: "var(--on-primary)",
               textDecoration:
                 "none",
             }}
@@ -1005,11 +1005,11 @@ export default function ProposalsPage() {
                   key={proposal.id}
                   style={{
                     border:
-                      "1px solid #ddd",
+                      "1px solid var(--border)",
                     borderRadius: 14,
                     padding: 24,
                     background:
-                      "#fff",
+                      "var(--surface)",
                   }}
                 >
                   {isScenePlan ? (
@@ -1037,7 +1037,7 @@ export default function ProposalsPage() {
                           style={{
                             fontSize: 13,
                             color:
-                              "#666",
+                              "var(--muted)",
                             marginBottom:
                               8,
                           }}
@@ -1125,8 +1125,8 @@ export default function ProposalsPage() {
                                 style={{
                                   margin: "8px 0",
                                   padding: "8px 12px",
-                                  borderLeft: "4px solid #d9c58b",
-                                  background: "#fffdf5",
+                                  borderLeft: "4px solid var(--warn-border)",
+                                  background: "var(--warn-bg)",
                                   whiteSpace: "pre-wrap",
                                 }}
                               >
@@ -1149,7 +1149,7 @@ export default function ProposalsPage() {
                             </p>
 
                             {data.ambiguity && (
-                              <p style={{ color: "#8a5a00" }}>
+                              <p style={{ color: "var(--warn-text)" }}>
                                 <strong>Неоднозначность:</strong>{" "}
                                 {data.ambiguity}
                               </p>
@@ -1211,7 +1211,7 @@ export default function ProposalsPage() {
                         padding: 14,
                         borderRadius: 8,
                         background:
-                          "#f7f7f7",
+                          "var(--surface-2)",
                         fontSize: 14,
                       }}
                     >
@@ -1240,7 +1240,7 @@ export default function ProposalsPage() {
                       marginTop: 24,
                       paddingTop: 20,
                       borderTop:
-                        "1px solid #eee",
+                        "1px solid var(--border-soft)",
                     }}
                   >
                     <span
@@ -1252,7 +1252,7 @@ export default function ProposalsPage() {
                         borderRadius:
                           20,
                         background:
-                          "#fff4cc",
+                          "var(--warn-bg)",
                         fontSize: 13,
                         fontWeight:
                           600,
@@ -1289,9 +1289,9 @@ export default function ProposalsPage() {
                           border:
                             "none",
                           background:
-                            "#111",
+                            "var(--primary)",
                           color:
-                            "#fff",
+                            "var(--on-primary)",
                           cursor:
                             isProcessing
                               ? "default"
@@ -1328,9 +1328,9 @@ export default function ProposalsPage() {
                           borderRadius:
                             8,
                           border:
-                            "1px solid #ccc",
+                            "1px solid var(--border)",
                           background:
-                            "#fff",
+                            "var(--surface)",
                           cursor:
                             isProcessing
                               ? "default"

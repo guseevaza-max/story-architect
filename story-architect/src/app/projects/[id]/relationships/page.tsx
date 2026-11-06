@@ -62,10 +62,10 @@ export default async function RelationshipsPage({
       </div>
 
       {r.reason && (
-        <p style={{ color: "#555", lineHeight: 1.6 }}>{r.reason}</p>
+        <p style={{ color: "var(--text-2)", lineHeight: 1.6 }}>{r.reason}</p>
       )}
 
-      <p style={{ color: "#777", fontSize: 14, marginBottom: 0 }}>
+      <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 0 }}>
         {r.validFromChapter !== null
           ? `С главы ${r.validFromChapter}`
           : "С начала истории"}
@@ -96,7 +96,7 @@ export default async function RelationshipsPage({
         <>
           <h2>Действующие</h2>
           {active.length === 0 ? (
-            <p style={{ color: "#666" }}>Действующих отношений нет.</p>
+            <p style={{ color: "var(--muted)" }}>Действующих отношений нет.</p>
           ) : (
             <div
               style={{

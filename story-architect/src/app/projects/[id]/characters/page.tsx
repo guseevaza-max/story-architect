@@ -49,7 +49,7 @@ export default async function CharactersPage({
         maxWidth: 1100,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 30 }}>
@@ -75,7 +75,7 @@ export default async function CharactersPage({
           <p
             style={{
               margin: 0,
-              color: "#666",
+              color: "var(--muted)",
               fontSize: 18,
             }}
           >
@@ -87,7 +87,7 @@ export default async function CharactersPage({
           style={{
             padding: "10px 16px",
             borderRadius: 20,
-            background: "#f3f4f6",
+            background: "var(--surface-2)",
             fontWeight: 600,
           }}
         >
@@ -99,7 +99,7 @@ export default async function CharactersPage({
         <section
           style={{
             padding: 50,
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             textAlign: "center",
           }}
@@ -115,7 +115,7 @@ export default async function CharactersPage({
 
           <h2>Пока нет персонажей</h2>
 
-          <p style={{ color: "#666" }}>
+          <p style={{ color: "var(--muted)" }}>
             Персонажи появятся здесь после принятия
             AI-предложений в Canon.
           </p>
@@ -127,8 +127,8 @@ export default async function CharactersPage({
               marginTop: 16,
               padding: "12px 20px",
               borderRadius: 8,
-              background: "#111",
-              color: "#fff",
+              background: "var(--primary)",
+              color: "var(--on-primary)",
               textDecoration: "none",
             }}
           >
@@ -148,10 +148,10 @@ export default async function CharactersPage({
             <article
               key={character.id}
               style={{
-                border: "1px solid #ddd",
+                border: "1px solid var(--border)",
                 borderRadius: 12,
                 padding: 24,
-                background: "#fff",
+                background: "var(--surface)",
               }}
             >
               <div
@@ -170,8 +170,8 @@ export default async function CharactersPage({
                   style={{
                     padding: "5px 9px",
                     borderRadius: 20,
-                    background: "#e8f5e9",
-                    color: "#26733a",
+                    background: "var(--ok-bg)",
+                    color: "var(--ok-text)",
                     fontSize: 12,
                     fontWeight: 700,
                   }}
@@ -190,7 +190,7 @@ export default async function CharactersPage({
               {character.description && (
                 <p
                   style={{
-                    color: "#555",
+                    color: "var(--text-2)",
                     lineHeight: 1.6,
                   }}
                 >

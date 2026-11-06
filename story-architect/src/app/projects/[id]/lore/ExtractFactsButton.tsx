@@ -78,7 +78,7 @@ export default function ExtractFactsButton({
       </button>
 
       {error && (
-        <div style={{ color: "#991b1b", marginTop: 8, maxWidth: 420 }}>
+        <div style={{ color: "var(--danger-text)", marginTop: 8, maxWidth: 420 }}>
           ⚠️ {error}
         </div>
       )}
@@ -91,7 +91,7 @@ export default function ExtractFactsButton({
           )}
 
           {result.truncated && (
-            <div style={{ color: "#8a5a00" }}>
+            <div style={{ color: "var(--warn-text)" }}>
               Материал длинный: обработано только начало текста.
             </div>
           )}

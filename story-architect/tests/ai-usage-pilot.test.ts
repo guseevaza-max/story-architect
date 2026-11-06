@@ -42,6 +42,10 @@ vi.mock("@/lib/db", () => ({
     },
     aiBudget: { findUnique: async () => ({ monthlyLimitUsd: 50 }) },
     aiRun: { create: async ({ data }: any) => { h.runs.push(data); return data; } },
+    // сюжетная карта пуста: Narrative Context для планировщика не добавляет ничего
+    book: { findFirst: async () => null },
+    plotBeat: { findMany: async () => [] },
+    secret: { findMany: async () => [] },
   },
 }));
 

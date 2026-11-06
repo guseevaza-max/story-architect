@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 
 export default function CanonChapterButton({
@@ -11,6 +12,7 @@ export default function CanonChapterButton({
   chapterId: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +53,7 @@ export default function CanonChapterButton({
         return;
       }
 
+      toast.success("Глава переведена в Canon");
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -74,9 +77,9 @@ export default function CanonChapterButton({
           borderRadius: 8,
           border: "none",
           background: saving
-            ? "#777"
-            : "#6b21a8",
-          color: "#fff",
+            ? "var(--surface-3)"
+            : "var(--violet-solid)",
+          color: "var(--on-primary)",
           cursor: saving
             ? "default"
             : "pointer",
@@ -93,7 +96,7 @@ export default function CanonChapterButton({
         <div
           style={{
             marginTop: 10,
-            color: "#991b1b",
+            color: "var(--danger-text)",
             fontSize: 14,
           }}
         >

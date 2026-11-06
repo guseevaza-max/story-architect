@@ -45,7 +45,7 @@ export default function LoginPage() {
         maxWidth: 500,
         margin: "60px auto",
         padding: 32,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <h1>Story Architect</h1>
@@ -91,7 +91,7 @@ export default function LoginPage() {
         </label>
 
         {error && (
-          <p style={{ color: "red" }}>
+          <p style={{ color: "var(--danger-text)" }}>
             {error}
           </p>
         )}

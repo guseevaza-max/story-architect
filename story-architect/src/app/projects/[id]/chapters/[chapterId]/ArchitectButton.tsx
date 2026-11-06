@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function ArchitectButton({
@@ -66,8 +67,8 @@ export default function ArchitectButton({
           padding: "12px 18px",
           border: "none",
           borderRadius: 10,
-          background: loading ? "#999" : "#111",
-          color: "#fff",
+          background: loading ? "var(--surface-3)" : "var(--primary)",
+          color: "var(--on-primary)",
           fontSize: 15,
           fontWeight: 600,
           cursor: loading ? "default" : "pointer",
@@ -83,13 +84,18 @@ export default function ArchitectButton({
             marginTop: 14,
             padding: 12,
             borderRadius: 8,
-            background: "#dcfce7",
-            color: "#166534",
+            background: "var(--ok-bg)",
+            color: "var(--ok-text)",
             fontSize: 14,
             lineHeight: 1.5,
           }}
         >
           {message}
+          <div style={{ marginTop: 8 }}>
+            <Link href={`/projects/${projectId}/proposals`} style={{ color: "var(--ok-text)", fontWeight: 600 }}>
+              Открыть предложения и утвердить план →
+            </Link>
+          </div>
         </div>
       )}
 
@@ -99,8 +105,8 @@ export default function ArchitectButton({
             marginTop: 14,
             padding: 12,
             borderRadius: 8,
-            background: "#fee2e2",
-            color: "#991b1b",
+            background: "var(--danger-bg)",
+            color: "var(--danger-text)",
             fontSize: 14,
             lineHeight: 1.5,
           }}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 type Scene = {
@@ -79,8 +80,8 @@ export default function ScenePlannerButton({
           padding: "10px 16px",
           borderRadius: 8,
           border: "none",
-          background: loading ? "#777" : "#111",
-          color: "#fff",
+          background: loading ? "var(--surface-3)" : "var(--primary)",
+          color: "var(--on-primary)",
           cursor: loading ? "default" : "pointer",
           fontWeight: 600,
         }}
@@ -96,8 +97,8 @@ export default function ScenePlannerButton({
             marginTop: 12,
             padding: 12,
             borderRadius: 8,
-            background: "#fee2e2",
-            color: "#991b1b",
+            background: "var(--danger-bg)",
+            color: "var(--danger-text)",
           }}
         >
           {error}
@@ -110,14 +111,19 @@ export default function ScenePlannerButton({
             marginTop: 12,
             padding: 12,
             borderRadius: 8,
-            background: "#e8f5e9",
-            color: "#287a35",
+            background: "var(--ok-bg)",
+            color: "var(--ok-text)",
             fontSize: 13,
           }}
         >
           ✓ Proposal плана сцен создан.
           <br />
           ID: {proposalId}
+          <div style={{ marginTop: 8 }}>
+            <Link href={`/projects/${projectId}/proposals`} style={{ color: "var(--ok-text)", fontWeight: 600 }}>
+              Открыть предложения и утвердить план сцен →
+            </Link>
+          </div>
         </div>
       )}
 
@@ -125,10 +131,10 @@ export default function ScenePlannerButton({
         <div
           style={{
             marginTop: 20,
-            border: "1px solid #ddd",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             padding: 20,
-            background: "#fafafa",
+            background: "var(--surface-2)",
           }}
         >
           <h3 style={{ marginTop: 0 }}>
@@ -137,7 +143,7 @@ export default function ScenePlannerButton({
 
           <p
             style={{
-              color: "#666",
+              color: "var(--muted)",
               fontSize: 14,
             }}
           >
@@ -151,15 +157,15 @@ export default function ScenePlannerButton({
               style={{
                 marginTop: 16,
                 padding: 16,
-                border: "1px solid #ddd",
+                border: "1px solid var(--border)",
                 borderRadius: 10,
-                background: "#fff",
+                background: "var(--surface)",
               }}
             >
               <div
                 style={{
                   fontSize: 13,
-                  color: "#777",
+                  color: "var(--muted)",
                   marginBottom: 5,
                 }}
               >
@@ -203,7 +209,7 @@ export default function ScenePlannerButton({
                 marginTop: 20,
                 padding: 16,
                 borderRadius: 10,
-                background: "#fff7ed",
+                background: "var(--warn-bg)",
               }}
             >
               <strong>Открытые вопросы</strong>

@@ -55,7 +55,7 @@ export default function NewProjectPage() {
         maxWidth: 700,
         margin: "0 auto",
         padding: 40,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-ui), system-ui, sans-serif",
       }}
     >
       <div style={{ marginBottom: 30 }}>
@@ -64,9 +64,9 @@ export default function NewProjectPage() {
           onClick={() => router.push("/dashboard")}
           style={{
             padding: "8px 14px",
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 8,
-            background: "#fff",
+            background: "var(--surface)",
             cursor: "pointer",
           }}
         >
@@ -187,7 +187,7 @@ export default function NewProjectPage() {
         </label>
 
         {error && (
-          <p style={{ color: "red" }}>
+          <p style={{ color: "var(--danger-text)" }}>
             {error}
           </p>
         )}
@@ -197,7 +197,7 @@ export default function NewProjectPage() {
           disabled={loading}
           style={{
             padding: "10px 16px",
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             cursor: loading ? "default" : "pointer",
           }}
