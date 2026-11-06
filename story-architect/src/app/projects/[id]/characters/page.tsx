@@ -163,7 +163,12 @@ export default async function CharactersPage({
                 }}
               >
                 <h2 style={{ margin: 0 }}>
-                  {character.name}
+                  <Link
+                    href={`/projects/${project.id}/characters/${character.id}`}
+                    style={{ color: "inherit", textDecoration: "none" }}
+                  >
+                    {character.name}
+                  </Link>
                 </h2>
 
                 <span
@@ -218,6 +223,12 @@ export default async function CharactersPage({
                     <strong>Способности:</strong> есть
                   </p>
                 )}
+
+              <p style={{ marginBottom: 0 }}>
+                <Link href={`/projects/${project.id}/characters/${character.id}`}>
+                  Открыть карточку →
+                </Link>
+              </p>
             </article>
           ))}
         </div>

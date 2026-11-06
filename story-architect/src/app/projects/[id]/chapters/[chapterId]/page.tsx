@@ -17,6 +17,9 @@ import ApproveChapterButton from "./ApproveChapterButton";
 import CanonChapterButton from "./CanonChapterButton";
 import MemoryUpdateButton from "./MemoryUpdateButton";
 import ChapterWorkspace from "./ChapterWorkspace";
+import PlanCheckHistory from "./PlanCheckHistory";
+import ChapterDecisions from "@/components/proposals/ChapterDecisions";
+import type { Proposal } from "@/components/proposals/ProposalCard";
 import { ApprovedPlan, ApprovedScenes, EmptyNote, panelBox } from "./PlanViews";
 
 /**
@@ -39,7 +42,7 @@ export default async function ChapterPage({
   const data = await loadChapterPage(session.user.id, id, chapterId);
   if (!data) notFound();
 
-  const { project, chapter, plan, hasPlan, pending, siblings } = data;
+  const { project, chapter, plan, hasPlan, pending, history, planChecks, siblings } = data;
   const base = `/projects/${project.id}/chapters/${chapter.id}`;
   const proposalsHref = `/projects/${project.id}/proposals`;
   const scenes = chapter.scenes;
@@ -84,19 +87,11 @@ export default async function ChapterPage({
     // ───────────── 2. Планирование ─────────────
     planning: (
       <>
-        {pending.length > 0 && (
-          <section style={{ ...panelBox, background: "var(--warn-bg)", borderColor: "var(--warn-border)" }}>
-            <strong>Ждут вашего решения: {pending.length}</strong>
-            <p style={{ margin: "6px 0 10px", color: "var(--warn-text)" }}>
-              {pending.some((p) => p.entityType === "chapter_plan") ? "План главы" : ""}
-              {pending.some((p) => p.entityType === "chapter_plan") && pending.some((p) => p.entityType === "scene_plan") ? " и " : ""}
-              {pending.some((p) => p.entityType === "scene_plan") ? "план сцен" : ""} утверждается в Центре решений. Автоматически ничего не принимается.
-            </p>
-            <Link href={proposalsHref} style={{ fontWeight: 600 }}>
-              Открыть Центр решений →
-            </Link>
-          </section>
-        )}
+        <ChapterDecisions
+          projectId={project.id}
+          pending={pending.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })) as unknown as Proposal[]}
+          history={history}
+        />
 
         <section style={panelBox}>
           <h2 style={{ marginTop: 0 }}>Architect</h2>
@@ -135,6 +130,7 @@ export default async function ChapterPage({
               Сверяет план с Canon, состоянием истории и сюжетной картой, проверяет покрытие плана сценами и ограничения на раскрытие тайн. Текст главы не нужен. Это платный запрос ИИ, он запускается только по вашей кнопке. Canon и статус главы не меняются.
             </p>
             <ContinuityButton projectId={project.id} chapterId={chapter.id} mode="plan" />
+            <PlanCheckHistory items={planChecks} />
           </section>
         ) : (
           <EmptyNote title="Проверка плана и сцен до написания">Станет доступна, когда появится утверждённый план главы или план сцен.</EmptyNote>

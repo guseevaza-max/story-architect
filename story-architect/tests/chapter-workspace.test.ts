@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     project: { findFirst: async () => h.project },
     chapter: { findFirst: async () => h.chapter, findMany: async () => [] },
-    proposal: { findMany: async (a: any) => ((h.pendingWhere = a.where), [{ id: "pr1", entityType: "chapter_plan" }]) },
+    proposal: { findMany: async (a: any) => (a.where.status === "PENDING" ? ((h.pendingWhere = a.where), [{ id: "pr1", entityType: "chapter_plan" }]) : []) },
   },
 }));
 
@@ -201,9 +201,10 @@ describe("состав страниц: ничего не потеряно", () =
 
   it("утверждение планов остаётся в Центре решений: встроенного принятия нет", () => {
     const page = read(DIR + "page.tsx");
-    expect(page).toContain("/proposals");
+    // страница сама ничего не принимает: решения идут через ChapterDecisions -> тот же маршрут действия
+    expect(page).toContain("ChapterDecisions");
     expect(page).not.toMatch(/proposals\/\$\{[^}]*\}\/action|api\/proposals/);
-    expect(page).toContain("Автоматически ничего не принимается");
+    expect(read("src/components/proposals/ChapterDecisions.tsx")).toContain("Автоматически ничего не принимается");
   });
 
   it("Writer только при сценах, Approve/Canon/Memory только в своих статусах", () => {

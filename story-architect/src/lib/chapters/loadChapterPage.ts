@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { summaryText, type PlanHistoryItem } from "@/lib/ux/planHistory";
 
 export type ChapterPlan = {
   chapterPurpose?: string;
@@ -52,8 +53,34 @@ export async function loadChapterPage(userId: string, projectId: string, chapter
 
   const pending = await prisma.proposal.findMany({
     where: { projectId: project.id, status: "PENDING", sourceChapterId: chapter.id, entityType: { in: ["chapter_plan", "scene_plan"] } },
-    select: { id: true, entityType: true },
+    orderBy: { createdAt: "desc" },
   });
+  // История решений по планам этой главы (только чтение).
+  const decided = await prisma.proposal.findMany({
+    where: { projectId: project.id, status: { in: ["ACCEPTED", "REJECTED", "SUPERSEDED"] }, sourceChapterId: chapter.id, entityType: { in: ["chapter_plan", "scene_plan"] } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  const history = decided.map((d) => ({
+    id: d.id,
+    entityType: d.entityType,
+    status: d.status,
+    createdAt: d.createdAt.toISOString(),
+  }));
+
+  // История проверок плана (level 0). Только чтение; сбой не мешает странице.
+  let planChecks: PlanHistoryItem[] = [];
+  try {
+    const reports = await prisma.continuityReport.findMany({
+      where: { chapterId: chapter.id, level: 0 },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: { issues: { select: { title: true, priority: true, category: true } } },
+    });
+    planChecks = reports.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), summary: summaryText(r.summary), issues: r.issues }));
+  } catch {
+    planChecks = [];
+  }
 
   const siblingRows = await prisma.chapter.findMany({
     where: { book: { projectId: project.id } },
@@ -62,5 +89,5 @@ export async function loadChapterPage(userId: string, projectId: string, chapter
   const siblings = siblingRows.map((c) => ({ id: c.id, number: c.number, title: c.title, status: c.status, bookNumber: c.book.number }));
 
   const plan = chapter.plan as ChapterPlan | null;
-  return { project, chapter, plan, hasPlan: planHasContent(plan), pending, siblings };
+  return { project, chapter, plan, hasPlan: planHasContent(plan), pending, history, planChecks, siblings };
 }
